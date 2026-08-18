@@ -108,3 +108,75 @@ def test_unreadable_file_degrades_gracefully(tmp_path):
     finally:
         # Restore permissions for cleanup
         p.chmod(0o644)
+
+
+def test_valid_nested_config_survives_and_overrides_defaults(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text(
+        textwrap.dedent("""
+        [glyph.animation]
+        enabled = false
+        stroke_ms = 500
+        [output.mouse]
+        scale = 2.0
+    """),
+        encoding="utf-8",
+    )
+    cfg = load_config(p)
+    # Valid nested values should survive into Config
+    assert cfg.get("glyph.animation.enabled") is False
+    assert cfg.get("glyph.animation.stroke_ms") == 500
+    assert cfg.get("output.mouse.scale") == 2.0
+    # No errors or warnings for valid nested config
+    assert cfg.errors == ()
+    assert cfg.warnings == ()
+
+
+def test_nested_unknown_leaf_warns_and_is_dropped_siblings_survive(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text(
+        textwrap.dedent("""
+        [glyph.animation]
+        enabled = false
+        wobble = 3
+    """),
+        encoding="utf-8",
+    )
+    cfg = load_config(p)
+    # Valid nested value survives
+    assert cfg.get("glyph.animation.enabled") is False
+    # Unknown nested leaf is dropped but warned
+    assert any("glyph.animation.wobble" in w for w in cfg.warnings)
+    assert cfg.errors == ()
+    # Verify wobble is not accessible
+    try:
+        cfg.get("glyph.animation.wobble")
+        raise AssertionError("expected KeyError for glyph.animation.wobble")
+    except KeyError:
+        pass
+
+
+def test_theme_scalar_produces_one_error_no_warnings(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('theme = "neon"\n', encoding="utf-8")
+    cfg = load_config(p)
+    # Should use defaults, not crash
+    assert cfg.get("theme.preset") == DEFAULTS["theme"]["preset"]
+    # Should have exactly one error (the structural mismatch)
+    assert len(cfg.errors) == 1
+    assert "theme" in cfg.errors[0]
+    assert "section" in cfg.errors[0]
+    # No warnings - theme is a known key with the wrong shape, not unknown
+    assert cfg.warnings == ()
+
+
+def test_scalar_expected_but_table_provided(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text("[glyph.size_px]\na = 1\n", encoding="utf-8")
+    cfg = load_config(p)
+    # Should fall back to default size_px
+    assert cfg.get("glyph.size_px") == DEFAULTS["glyph"]["size_px"]
+    # Should record the error
+    assert len(cfg.errors) == 1
+    assert "glyph.size_px" in cfg.errors[0]
+    assert "section" in cfg.errors[0] or "value" in cfg.errors[0]

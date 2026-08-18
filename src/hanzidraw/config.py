@@ -164,6 +164,59 @@ class Config:
         return _dig(self.data, dotted)
 
 
+def _prune_and_validate_structure(
+    user: dict, defaults: dict, prefix: str = ""
+) -> tuple[dict, list[str], list[str]]:
+    """Recursively validate user config structure against DEFAULTS.
+
+    At each key, determine if it is unknown, mistyped (dict vs scalar), or valid,
+    and either keep or drop it. Record errors and warnings accordingly.
+
+    Returns: (cleaned_user_dict, errors, warnings)
+    """
+    cleaned: dict[str, Any] = {}
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    for key, user_value in user.items():
+        dotted = f"{prefix}{key}" if prefix else key
+
+        if key not in defaults:
+            # Unknown key at this level
+            warnings.append(f"{dotted}: unknown setting, ignored")
+            continue
+
+        default_value = defaults[key]
+
+        # Check type mismatches
+        if isinstance(default_value, dict):
+            if isinstance(user_value, dict):
+                # Both are dicts - recurse into them
+                sub_cleaned, sub_errors, sub_warnings = _prune_and_validate_structure(
+                    user_value, default_value, dotted + "."
+                )
+                cleaned[key] = sub_cleaned
+                errors.extend(sub_errors)
+                warnings.extend(sub_warnings)
+            else:
+                # Scalar where dict (section) expected
+                errors.append(
+                    f"{dotted}: expected a section ([{dotted}]), got a scalar value; using defaults"
+                )
+                # Drop this key - defaults will be used
+        else:
+            # Default value is a scalar
+            if isinstance(user_value, dict):
+                # Dict (section) where scalar expected
+                errors.append(f"{dotted}: expected a value, got a section; using defaults")
+                # Drop this key - defaults will be used
+            else:
+                # Both are scalars - keep user value
+                cleaned[key] = user_value
+
+    return cleaned, errors, warnings
+
+
 def _validate(merged: dict) -> list[str]:
     errors: list[str] = []
     for key, allowed in _CHOICES.items():
@@ -196,30 +249,14 @@ def load_config(path: Path | None = None) -> Config:
             errors.append(f"{path}: could not be parsed ({exc}); using defaults")
             user = {}
 
-    # Check for unknown keys and validate structure
-    user_keys = {k for k, _ in _walk(user)}
-    known_keys = {k for k, _ in _walk(DEFAULTS)}
-    filtered_user: dict[str, Any] = {}
+    # Recursively validate and clean user config structure
+    filtered_user, struct_errors, struct_warnings = _prune_and_validate_structure(user, DEFAULTS)
+    errors.extend(struct_errors)
+    warnings.extend(struct_warnings)
 
-    for key in sorted(user_keys):
-        if key not in known_keys:
-            warnings.append(f"{key}: unknown setting, ignored")
-
-    # Validate structure: top-level keys that should be dicts must be dicts
-    for key in DEFAULTS:
-        if key in user and not isinstance(user[key], dict) and isinstance(DEFAULTS[key], dict):
-            errors.append(
-                f"{key}: expected a section ([{key}]), got a scalar value; using defaults"
-            )
-        elif key in user and isinstance(user[key], dict) and isinstance(DEFAULTS[key], dict):
-            # Filter sub-keys: only keep known ones
-            filtered_user[key] = {k: v for k, v in user[key].items() if f"{key}.{k}" in known_keys}
-        elif key in user and key in known_keys:
-            filtered_user[key] = user[key]
-
-    # Get preset, validating that theme is a dict
+    # Get preset name from cleaned user config
     preset_name = DEFAULTS["theme"]["preset"]
-    if "theme" in filtered_user:
+    if "theme" in filtered_user and isinstance(filtered_user.get("theme"), dict):
         preset_name = filtered_user["theme"].get("preset", preset_name)
 
     preset = PRESETS.get(preset_name, {})
