@@ -111,10 +111,28 @@ def _cmd_draw(args: argparse.Namespace) -> int:
         ),
     )
     pad = (advance - size) / 2.0
+    outline_style = str(cfg.get("glyph.style")) == "outline"
     for index, ch in enumerate(chars):
         ox = pad + advance * (index % columns)
         oy = pad + advance * (index // columns)
-        draw_glyph(backend, load_glyph(store, ord(ch)), ox, oy, size)
+        codepoint = ord(ch)
+        outline = store.outline(codepoint) if outline_style else None
+        if outline:
+            backend.begin_glyph(ox, oy, size)
+            backend.outline(outline, ox, oy, size)
+            backend.end_glyph()
+        else:
+            # No outline for this character (mixed database), or the whole
+            # database was built --medians-only: draw it rather than skip
+            # it, so a mixed database still renders everything.
+            draw_glyph(backend, load_glyph(store, codepoint), ox, oy, size)
+
+    if outline_style and store.get_meta("build_medians_only") == "1":
+        print(
+            "glyph.style = outline needs outlines, but this database is medians-only; "
+            "drew brush strokes instead. Rebuild with 'hanzidraw fetch-data --rebuild' "
+            "(without --medians-only) for the real contour."
+        )
 
     out = Path(args.output)
     try:
