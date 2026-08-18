@@ -1,7 +1,10 @@
 import dataclasses
 import gzip
 
+import pytest
+
 from hanzidraw import cli
+from hanzidraw.cli import main
 from hanzidraw.data import sources
 
 
@@ -47,6 +50,51 @@ def test_fetch_data_reports_a_message_not_a_traceback_for_an_empty_hanzidb(
     assert "Traceback" not in captured.err
     assert "column" in captured.err
     assert not db.exists()
+
+
+def test_version_exits_zero(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+
+
+def test_help_lists_every_command(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    out = capsys.readouterr().out
+    for command in ("run", "fetch-data", "draw", "export-firmware"):
+        assert command in out
+
+
+def test_draw_reports_a_missing_database(tmp_path, capsys):
+    code = main(
+        ["draw", "十", "-o", str(tmp_path / "o.svg"), "--db", str(tmp_path / "none.sqlite")]
+    )
+    assert code == 1
+    assert "fetch-data" in capsys.readouterr().err
+
+
+def test_draw_writes_an_svg_from_a_small_database(tmp_path):
+    from hanzidraw.data.store import Store
+
+    db = tmp_path / "db.sqlite"
+    store = Store.create(db)
+    store.add_char(ord("十"), 1, 2, (((-512, 0), (512, 0)), ((0, -512), (0, 512))), None)
+    store.finish()
+    store.close()
+    out = tmp_path / "o.svg"
+    assert (
+        main(["draw", "十", "-o", str(out), "--db", str(db), "--config", str(tmp_path / "n.toml")])
+        == 0
+    )
+    assert out.read_text(encoding="utf-8").count("<polyline") == 2
+
+
+def test_export_firmware_reports_a_missing_database(tmp_path, capsys):
+    code = main(
+        ["export-firmware", "-o", str(tmp_path / "h.c"), "--db", str(tmp_path / "n.sqlite")]
+    )
+    assert code == 1
 
 
 def test_fetch_data_reports_a_message_not_a_traceback_for_an_unrecognised_header(
