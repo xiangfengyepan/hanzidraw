@@ -12,6 +12,10 @@ from functools import lru_cache
 
 from .syllables import MAX_SYLLABLE_LEN, is_syllable, is_syllable_prefix
 
+_INTERJECTION_ONLY = frozenset({"n", "ng", "m", "hm", "hng"})
+_MAX_INPUT_LEN = 32
+_MAX_SPLITS = 2048
+
 
 @dataclass(frozen=True)
 class Segmentation:
@@ -41,12 +45,20 @@ def _all_splits(text: str) -> tuple[tuple[str, ...], ...]:
         if not is_syllable(head):
             continue
         for rest in _all_splits(text[size:]):
-            out.append((head, *rest))
+            candidate = (head, *rest)
+            # Don't enumerate splits that end with interjection syllables,
+            # unless it's the only remaining character (complete input edge case).
+            if candidate and candidate[-1] in _INTERJECTION_ONLY and text[size:]:
+                continue
+            out.append(candidate)
+            if len(out) >= _MAX_SPLITS:
+                return tuple(out)
     return tuple(out)
 
 
 def _rank_key(sylls: tuple[str, ...]) -> tuple:
-    return (len(sylls), tuple(-len(s) for s in sylls), sylls)
+    junk = sum(1 for s in sylls if s in _INTERJECTION_ONLY)
+    return (len(sylls), junk, tuple(-len(s) for s in sylls), sylls)
 
 
 def _segment_run(run: str) -> list[Segmentation]:
@@ -71,13 +83,11 @@ def _segment_run(run: str) -> list[Segmentation]:
     return results
 
 
-def segment(raw: str, max_alternatives: int = 3) -> list[Segmentation]:
+def segment(raw: str, max_alternatives: int = 2) -> list[Segmentation]:
     """Return up to ``max_alternatives`` segmentations, best first."""
-    if not raw:
+    if not raw or len(raw) > _MAX_INPUT_LEN:
         return []
-    runs = [r for r in raw.split("'")]
-    if any(not r for r in runs[:-1]):  # a stray apostrophe mid-input
-        runs = [r for r in runs if r]
+    runs = [r for r in raw.split("'") if r]
     if not runs:
         return []
 
