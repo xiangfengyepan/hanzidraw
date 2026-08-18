@@ -58,7 +58,7 @@ def test_emitted_header_declares_the_struct_and_max_strokes():
         "documents this for the owner rather than hiding it."
     )
 )
-def test_golden_name_characters_reproduce_the_firmware_arrays(fixtures, tmp_path):
+def test_golden_name_characters_reproduce_the_firmware_arrays(fixtures, tmp_path, monkeypatch):
     """The proof that the em-box transform was ported correctly.
 
     Parses the checked-in hanzi_data.c, then regenerates those four characters
@@ -66,7 +66,16 @@ def test_golden_name_characters_reproduce_the_firmware_arrays(fixtures, tmp_path
 
     xfail: see the reason above -- upstream stroke data has drifted since the
     firmware dictionary was generated, this is not a bug in the transform.
+
+    This is the one test in the suite that deliberately opts back out of
+    tests/conftest.py's XDG_DATA_HOME/LOCALAPPDATA isolation: it exists to
+    compare against the real, already-built database (the one actually on the
+    keyboard), read-only, so it needs to find it rather than a scratch
+    directory that is guaranteed to be empty.
     """
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+
     from hanzidraw.config import db_path
     from hanzidraw.data.store import Store, StoreError
     from hanzidraw.firmware.subset import firmware_xy

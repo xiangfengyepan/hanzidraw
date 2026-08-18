@@ -34,7 +34,7 @@ def _qt_application():
 
 @pytest.fixture(autouse=True)
 def _isolate_user_config(tmp_path, monkeypatch):
-    """No test may read or write the real user configuration.
+    """No test may read or write the real user configuration or data directory.
 
     Several CLI tests call ``cli.main(["draw", ...])`` with no ``--config``, so
     they fall through to ``load_config(config_path())`` -- the owner's own
@@ -43,13 +43,20 @@ def _isolate_user_config(tmp_path, monkeypatch):
     has that file. Both platform locations are redirected, so a Windows run is
     isolated too.
 
-    ``XDG_DATA_HOME``/``LOCALAPPDATA`` are deliberately *not* redirected: the
-    firmware golden test reads the real database read-only on purpose (it is the
-    comparison against the dictionary actually on the keyboard), and would skip
-    instead of xfailing if it could not find it.
+    ``XDG_DATA_HOME``/``LOCALAPPDATA`` are isolated the same way, for the same
+    reason: nothing but the one test that explicitly opts back out of it (the
+    firmware golden comparison in tests/firmware/test_emit_c.py, which reads
+    the real database read-only on purpose) should be able to reach the
+    owner's real data directory at all. Isolating this used to mean that test
+    would ``skip`` instead of ``xfail`` wherever the database was not found --
+    which, in practice, was everywhere except this one laptop, so the
+    "399 passed, 1 xfailed" baseline was never actually reproducible
+    elsewhere. Letting that one test un-isolate itself keeps both properties.
     """
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
 
 
 @pytest.fixture

@@ -192,6 +192,12 @@ The abort keys (Ctrl+. and Esc) are the one binding that also works while
 another application has focus, and only for the duration of a `mouse` draw —
 see Output backends below.
 
+**Platform note:** Ctrl+. is confirmed working as an abort key on Linux. On
+Windows it is expected to be unreliable — the Win32 backend typically reports
+that key combination with `char=None` and only a virtual-key code, which the
+current match does not handle — and this has not yet been verified on real
+Windows hardware. Until it is, **Esc is the reliable abort key on Windows.**
+
 ## Configuration
 
 TOML file, hot-reloaded on save:
@@ -212,6 +218,11 @@ Hot reload distinguishes two kinds of change:
   `canvas.wrap`) changes the geometry the sheet is built from, so the sheet is
   cleared and the status bar says why: `canvas cleared: layout settings
   changed`.
+
+The sheet itself is `canvas.columns * canvas.advance * glyph.size_px` pixels
+wide (1656 px at the stock defaults: 6 * 1.15 * 240), and the window **scrolls**
+rather than reflowing or clipping whenever it is narrower than that -- so a
+horizontal scrollbar on a stock-sized window is expected, not a bug.
 
 Full annotated example, including the animation-speed knob:
 
