@@ -20,6 +20,18 @@ hanzidraw = "hanzidraw.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/hanzidraw"]
 
+[tool.hatch.build.targets.sdist]
+# Allowlist, not an exclude list: local-only directories are kept out of the
+# source distribution by omission, without depending on ignore files.
+include = [
+    "src/hanzidraw",
+    "tests",
+    "pyproject.toml",
+    "NOTICE",
+    "README.md",
+    "hanzidraw.spec",
+]
+
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
