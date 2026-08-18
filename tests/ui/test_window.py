@@ -98,6 +98,30 @@ def test_mouse_backend_without_pynput_falls_back_to_canvas_and_reports_it(
     assert getattr(win, "_mouse", None) is None  # never set up; abort has nothing to grab
 
 
+def test_image_backend_in_the_window_falls_back_to_canvas_and_reports_it(qtbot, tmp_path):
+    # Finding 3 (coordinator, task-18 review): output.backend = "image" is
+    # the headless `hanzidraw draw` path -- the window has nowhere to put a
+    # file per keystroke, so before this fix it silently drew nothing at all:
+    # no crash, no file, no canvas update, no message.
+    (tmp_path / "c.toml").write_text('[output]\nbackend = "image"\n', encoding="utf-8")
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("十"), 10, 2, MEDIANS, None)
+    store.add_reading("shi", ord("十"))
+    store.finish()
+    win = MainWindow(
+        store=store,
+        cfg=load_config(tmp_path / "c.toml"),
+        learn_path=tmp_path / "learn.json",
+    )
+    qtbot.addWidget(win)
+
+    _type(qtbot, win, "shi")
+    qtbot.keyClick(win, Qt.Key.Key_Space)
+
+    assert "draw command" in win.statusBar().currentMessage()
+    assert win.canvas.glyph_count == 1
+
+
 def test_f2_toggles_the_canvas_mode(qtbot, window):
     qtbot.keyClick(window, Qt.Key.Key_F2)
     assert window.canvas._mode == "single"

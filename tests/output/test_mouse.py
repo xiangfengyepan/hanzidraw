@@ -130,6 +130,90 @@ def test_an_unexpected_exception_from_the_pointer_still_releases_the_button():
     assert pointer.events == [("move", 0.0, 0.0), ("press",), ("release",)]
 
 
+def test_a_failing_release_does_not_mask_an_in_flight_abort():
+    # Finding 1 (coordinator, task-18 review): if release() itself raises
+    # while a MouseAbort is already unwinding, the release failure must not
+    # replace it -- the window's `except MouseAbort` has to keep catching it
+    # -- and `_down` must still be reset so the backend doesn't believe the
+    # button is stuck down.
+    class BrokenRelease(FakePointer):
+        def release(self):
+            raise RuntimeError("hardware release failed")
+
+    pointer = BrokenRelease()
+    abort = threading.Event()
+    abort.set()
+    backend = _backend(pointer, abort=abort)
+    with pytest.raises(MouseAbort) as exc:
+        draw_glyph(backend, GLYPH, 0.0, 0.0, 100.0)
+    assert isinstance(exc.value.__cause__, RuntimeError)  # chained, not swallowed
+    assert backend._down is False
+
+
+def test_a_single_point_stroke_still_honours_a_preset_abort_event():
+    # Finding 2: a stroke of 0 or 1 points never entered the `points[1:]`
+    # loop, so it never called _check() at all -- structurally defeating two
+    # of the three ways out. Single-point strokes are real: glyph_from_em
+    # filters only empty strokes, not single-point ones.
+    pointer = FakePointer()
+    abort = threading.Event()
+    abort.set()
+    glyph = Glyph((((0.5, 0.5),),))
+    with pytest.raises(MouseAbort):
+        draw_glyph(_backend(pointer, abort=abort), glyph, 0.0, 0.0, 100.0)
+    assert pointer.events[-1] == ("release",)
+
+
+def test_a_single_point_stroke_still_honours_an_exceeded_deadline():
+    pointer = FakePointer()
+    clock = iter([0.0, 100.0, 100.0])
+    glyph = Glyph((((0.5, 0.5),),))
+    with pytest.raises(MouseAbort) as exc:
+        draw_glyph(
+            _backend(pointer, deadline_ms=1000, monotonic=lambda: next(clock)),
+            glyph,
+            0.0,
+            0.0,
+            100.0,
+        )
+    assert "took too long" in str(exc.value)
+    assert pointer.events[-1] == ("release",)
+
+
+def test_a_fully_clamped_stroke_reports_rather_than_pressing():
+    # Finding 4: when clamp_to_screen collapses every point of a stroke onto
+    # the same pixel, the glyph lies entirely outside the drawable area.
+    # Pressing and releasing there would draw nothing while looking like it
+    # succeeded, so this must report instead of touching the pointer at all.
+    pointer = FakePointer()
+    backend = _backend(pointer, clamp=(0.0, 0.0, 10.0, 10.0))
+    glyph = Glyph((((5.0, 5.0), (6.0, 5.0)),))
+    with pytest.raises(MouseAbort) as exc:
+        draw_glyph(backend, glyph, 1000.0, 1000.0, 100.0)
+    assert "outside the screen" in str(exc.value)
+    assert pointer.events == []
+
+
+def test_scale_is_applied_before_clamp_so_clamping_stays_a_hard_guarantee():
+    # Minor: if clamp ran before scale, a point already inside the box
+    # (40 < 50) would escape it after being doubled (80 > 50). Each existing
+    # scale/clamp test leaves the other at its default, so an accidental
+    # ordering swap would still pass the rest of the suite; this closes that
+    # gap by exercising both together.
+    pointer = FakePointer()
+    glyph = Glyph((((0.2, 0.0), (0.4, 0.0)),))
+    draw_glyph(
+        _backend(pointer, scale=2.0, clamp=(0.0, 0.0, 50.0, 50.0)),
+        glyph,
+        0.0,
+        0.0,
+        100.0,
+    )
+    moves = [(x, y) for _kind, x, y in [e for e in pointer.events if e[0] == "move"]]
+    assert all(x <= 50.0 for x, _y in moves)
+    assert moves[-1] == (50.0, 0.0)  # 40 * scale(2) = 80, clamped down to the edge
+
+
 def test_end_glyph_does_not_touch_the_pointer():
     # Ruling B (coordinator, task-18): advance() was removed from the Backend
     # protocol entirely (it had no callers anywhere in the codebase), and

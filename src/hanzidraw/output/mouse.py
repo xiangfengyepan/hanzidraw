@@ -91,21 +91,46 @@ class MouseBackend:
 
     def stroke(self, points: Sequence[Point]) -> None:
         if not points:
+            self._check()  # a degenerate stroke still owes the caller an abort/deadline check
             return
+        transformed = [self._transform(point) for point in points]
+        if len(transformed) > 1 and len(set(transformed)) == 1:
+            # scale/clamp collapsed every point onto the same pixel: the
+            # glyph (or this stroke of it) lies entirely outside the drawable
+            # area. Pressing and releasing there would draw nothing while
+            # looking like it succeeded, so report it instead.
+            raise MouseAbort("the glyph fell outside the screen bounds")
+        in_flight: BaseException | None = None
         try:
-            first = self._transform(points[0])
-            self._move(first)
+            self._move(transformed[0])
             self._p.press()
             self._down = True
-            for point in points[1:]:
+            rest = transformed[1:]
+            if not rest:
+                # a single-point stroke never enters the loop below, but it
+                # still owes the abort event and the deadline a look.
                 self._check()
-                self._move(self._transform(point))
+            for point in rest:
+                self._check()
+                self._move(point)
                 if self._delay:
                     self._sleep(self._delay)
+        except BaseException as exc:
+            in_flight = exc
+            raise
         finally:
             if self._down:
-                self._p.release()
-                self._down = False
+                self._down = False  # reset regardless of what release() does below
+                try:
+                    self._p.release()
+                except Exception as release_exc:
+                    if in_flight is None:
+                        raise
+                    # An abort (or any other exception) is already unwinding;
+                    # let *that* be what the caller sees so "the user aborted"
+                    # and "the hardware release failed" stay distinguishable.
+                    # Chain the release failure onto it instead of replacing it.
+                    in_flight.__cause__ = release_exc
 
     def end_glyph(self) -> None:
         return

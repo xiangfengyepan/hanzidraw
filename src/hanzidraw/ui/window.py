@@ -13,7 +13,7 @@ from ..data.store import Store
 from ..ime.learn import Learn
 from ..ime.session import Key, Session
 from ..ime.sources import CharSource, PhraseSource
-from ..output.base import Style, draw_glyph, load_glyph
+from ..output.base import draw_glyph, load_glyph
 from ..output.canvas import CanvasBackend
 from ..output.mouse import MouseAbort
 from .candidatebar import CandidateBar
@@ -176,11 +176,13 @@ class MainWindow(QMainWindow):
             clamp = None
             if bool(self._cfg.get("output.mouse.clamp_to_screen")):
                 geo = self.screen().geometry()
+                # QRect.right()/bottom() are one pixel short of the true edge
+                # by Qt convention; add it back so clamping matches the screen.
                 clamp = (
                     float(geo.left()),
                     float(geo.top()),
-                    float(geo.right()),
-                    float(geo.bottom()),
+                    float(geo.right() + 1),
+                    float(geo.bottom() + 1),
                 )
             self._mouse = MouseBackend(
                 pointer,
@@ -190,17 +192,12 @@ class MainWindow(QMainWindow):
             )
             return self._mouse
         if which == "image":
-            from ..output.image import SvgBackend  # noqa: PLC0415
-
-            return SvgBackend(
-                width=int(self.canvas.width()),
-                height=int(self.canvas.height()),
-                background=str(self._cfg.get("canvas.background")),
-                style=Style(
-                    color=str(self._cfg.get("glyph.color")),
-                    width=float(self._cfg.get("glyph.stroke_width_px")),
-                ),
-            )
+            # The image/SVG backend is the headless hanzidraw draw path (see
+            # cli.py); the window has nowhere to put a file per keystroke and
+            # no canvas feedback for it, so silently building one here would
+            # discard every glyph without a crash or a message. Report and
+            # fall back instead of inventing per-commit file semantics.
+            self.status("output.backend = image is for the draw command; drawing to the canvas")
         return CanvasBackend(self.canvas)
 
     def commit_candidate(self, cand) -> None:
