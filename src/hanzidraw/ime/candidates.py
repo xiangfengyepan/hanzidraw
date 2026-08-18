@@ -21,7 +21,24 @@ def collect(
     return out
 
 
-def rank(cands: Iterable[Candidate], learn: Learn, key: str) -> list[Candidate]:
+def _tier(cand: Candidate, syllables_typed: int) -> int:
+    """Rank tier based on how much input the candidate consumes.
+
+    tier 0: full match (consumed == syllables_typed)
+    tier 1: prediction (consumed > syllables_typed)
+    tier 2: partial (consumed < syllables_typed)
+    """
+    if cand.consumed == syllables_typed:
+        return 0
+    elif cand.consumed > syllables_typed:
+        return 1
+    else:
+        return 2
+
+
+def rank(
+    cands: Iterable[Candidate], learn: Learn, key: str, syllables_typed: int
+) -> list[Candidate]:
     best: dict[str, Candidate] = {}
     for cand in cands:
         current = best.get(cand.text)
@@ -31,6 +48,7 @@ def rank(cands: Iterable[Candidate], learn: Learn, key: str) -> list[Candidate]:
     def sort_key(cand: Candidate) -> tuple:
         return (
             -learn.bonus(key, cand.text),
+            _tier(cand, syllables_typed),
             _SOURCE_PRIORITY.get(cand.source, 9),
             -cand.weight,
             cand.text,
