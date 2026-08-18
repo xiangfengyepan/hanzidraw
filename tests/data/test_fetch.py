@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from hanzidraw.data.fetch import FetchError, download, fetch_all
+from hanzidraw.data.fetch import FetchError, download, fetch_all, sha256_of_file
 from hanzidraw.data.sources import SOURCES, Source
 
 
@@ -76,3 +76,10 @@ def test_download_raises_fetch_error_for_whitespace_url(tmp_path):
     with pytest.raises(FetchError) as exc:
         download(" ", tmp_path / "o.txt")
     assert " " in str(exc.value)
+
+
+def test_sha256_of_file_agrees_with_hashlib(tmp_path):
+    path = tmp_path / "data.bin"
+    payload = b"the quick brown fox" * 1000
+    path.write_bytes(payload)
+    assert sha256_of_file(path) == hashlib.sha256(payload).hexdigest()

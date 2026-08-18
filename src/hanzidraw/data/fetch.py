@@ -18,6 +18,14 @@ class FetchError(Exception):
     """A source could not be downloaded."""
 
 
+def sha256_of_file(path: Path, *, chunk: int = 1 << 20) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for block in iter(lambda: fh.read(chunk), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def download(
     url: str, dest: Path, *, progress: Progress | None = None, chunk: int = 1 << 16
 ) -> str:
@@ -50,12 +58,9 @@ def download(
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise FetchError(f"could not download {url}: {exc}") from exc
 
-    digest = hashlib.sha256()
-    with part.open("rb") as fh:
-        for block in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(block)
+    digest = sha256_of_file(part)
     part.replace(dest)
-    return digest.hexdigest()
+    return digest
 
 
 def fetch_all(
