@@ -182,15 +182,16 @@ class Store:
 
     def phrases_for_key(self, key: str, limit: int) -> list[tuple[str, float]]:
         rows = self._conn.execute(
-            "SELECT text, weight FROM phrase WHERE pinyin_key = ? ORDER BY weight DESC LIMIT ?",
+            "SELECT text, weight FROM phrase WHERE pinyin_key = ? "
+            "ORDER BY weight DESC, length(text), text LIMIT ?",
             (key, limit),
         ).fetchall()
         return [(str(t), float(w)) for t, w in rows]
 
     def phrases_for_prefix(self, prefix: str, limit: int) -> list[tuple[str, float]]:
         rows = self._conn.execute(
-            "SELECT text, weight FROM phrase WHERE pinyin_key >= ? "
-            "AND pinyin_key < ? ORDER BY weight DESC, length(text) LIMIT ?",
+            "SELECT text, MAX(weight) AS w FROM phrase WHERE pinyin_key >= ? "
+            "AND pinyin_key < ? GROUP BY text ORDER BY w DESC, length(text), text LIMIT ?",
             (prefix, prefix + "￿", limit),
         ).fetchall()
         return [(str(t), float(w)) for t, w in rows]

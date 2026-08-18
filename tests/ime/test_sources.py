@@ -113,3 +113,26 @@ def test_consumed_can_exceed_segmentation_syllables_on_resegmentation(tmp_path):
     assert len(cands) == 1
     assert cands[0].consumed == 2
     # Consumer must slice, not index/assert on this
+
+
+def test_phrase_source_returns_exact_limit_when_prefix_deduped(tmp_path):
+    """When deduplicating prefix rows, still return exactly limit candidates."""
+    store = Store.create(tmp_path / "db_prefix_dup.sqlite")
+    # Same text keyed under different syllables - internally duplicated
+    store.add_phrase("cedu", "测度", 100.0)
+    store.add_phrase("ceduo", "测度", 90.0)
+    # One unique text to reach the limit
+    store.add_phrase("cedai", "测代", 80.0)
+    store.finish()
+    src = PhraseSource(store)
+    # Prefix "ce" has no exact key, so lookup uses only prefix rows
+    seg = segment("ce")[0]
+    # Despite 3 rows in the DB, they contain only 2 distinct texts.
+    # With limit=2, we should get exactly 2 candidates.
+    cands = src.lookup(seg, limit=2)
+    assert len(cands) == 2
+    texts = [c.text for c in cands]
+    # Should have the two distinct texts
+    assert set(texts) == {"测度", "测代"}
+    # 测度 should appear exactly once with the max weight
+    assert texts.count("测度") == 1

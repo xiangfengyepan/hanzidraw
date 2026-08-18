@@ -83,3 +83,32 @@ def test_open_rejects_a_stale_schema(tmp_path):
     with pytest.raises(StoreError) as exc:
         Store.open(path)
     assert "schema" in str(exc.value).lower()
+
+
+def test_phrases_for_prefix_deduplicates_by_text_and_keeps_max_weight(tmp_path):
+    """Same phrase text under different keys returns once with highest weight."""
+    store = Store.create(tmp_path / "db_dup.sqlite")
+    # Add the same text under two different keys with different weights
+    store.add_phrase("cedu", "测度", 100.0)
+    store.add_phrase("ceduo", "测度", 90.0)
+    store.finish()
+    # Should return the text once with the higher weight
+    rows = store.phrases_for_prefix("ce", limit=100)
+    texts = [t for t, w in rows]
+    assert texts.count("测度") == 1
+    # The weight should be the maximum of the two
+    assert [w for t, w in rows if t == "测度"] == [100.0]
+
+
+def test_phrases_for_prefix_ordering_is_deterministic_on_ties(tmp_path):
+    """Same weight and length -> consistent text order across calls."""
+    store = Store.create(tmp_path / "db_det.sqlite")
+    # Add two phrases with identical weight and length
+    store.add_phrase("testkey", "aaa", 500.0)
+    store.add_phrase("testkey", "bbb", 500.0)
+    store.add_phrase("testkey", "zzz", 500.0)
+    store.finish()
+    # Call multiple times and verify the order is stable
+    for _ in range(3):
+        rows = store.phrases_for_key("testkey", limit=10)
+        assert [t for t, w in rows] == ["aaa", "bbb", "zzz"]
