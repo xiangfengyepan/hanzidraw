@@ -129,6 +129,18 @@ def _cmd_draw(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run(args: argparse.Namespace) -> int:
+    try:
+        from .ui.app import run
+    except ImportError:
+        print("the GUI needs PySide6: pip install 'hanzidraw[gui]'", file=sys.stderr)
+        return 1
+    return run(
+        config=Path(args.config) if args.config else None,
+        db=Path(args.db) if args.db else None,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hanzidraw", description=__doc__)
     parser.add_argument("--version", action="version", version=__version__)
@@ -154,10 +166,14 @@ def main(argv: list[str] | None = None) -> int:
     draw.add_argument("--db", default=None)
     draw.set_defaults(func=_cmd_draw)
 
+    gui = sub.add_parser("run", help="open the drawing window (default)")
+    gui.add_argument("--config", default=None)
+    gui.add_argument("--db", default=None)
+    gui.set_defaults(func=_cmd_run)
+
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
-        parser.print_help()
-        return 0
+        args = parser.parse_args([*(argv or []), "run"])
     return int(args.func(args))
 
 
