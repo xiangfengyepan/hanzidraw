@@ -81,3 +81,28 @@ def test_build_report_lists_unknown_syllables(tmp_path, fixtures):
     )
     report = build(raw, tmp_path / "db.sqlite")
     assert report.unknown_syllables == ("xq",)
+
+
+def test_build_dedupes_duplicate_hanzidb_rows(tmp_path, fixtures):
+    raw = _raw(tmp_path, fixtures)
+    duplicated = (fixtures / "hanzidb_sample.csv").read_text(encoding="utf-8")
+    duplicated += "3,十,shí,ten,十,24.0,2,1,3,131\n"  # exact duplicate of the 十 row
+    (raw / "hanziDB.csv").write_text(duplicated, encoding="utf-8")
+
+    db = tmp_path / "db.sqlite"
+    report = build(raw, db)
+    store = Store.open(db)
+    assert report.duplicate_chars == 1
+    assert report.chars == len(list(store.all_chars_by_rank()))
+
+
+def test_build_dedupes_duplicate_cedict_entries(tmp_path, fixtures):
+    raw = _raw(tmp_path, fixtures)
+    duplicated = (fixtures / "cedict_sample.u8").read_text(encoding="utf-8")
+    duplicated += "一十 一十 [yi1 shi2] /ten (again)/\n"  # duplicate (pinyin_key, text)
+    with gzip.open(raw / "cedict.txt.gz", "wt", encoding="utf-8") as fh:
+        fh.write(duplicated)
+
+    report = build(raw, tmp_path / "db.sqlite")
+    assert report.duplicate_phrases == 1
+    assert report.phrases == 1

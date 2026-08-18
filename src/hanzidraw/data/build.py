@@ -21,13 +21,17 @@ class BuildReport:
     phrases: int = 0
     chars_without_geometry: int = 0
     phrases_dropped: int = 0
+    duplicate_chars: int = 0
+    duplicate_phrases: int = 0
     unknown_syllables: tuple[str, ...] = field(default_factory=tuple)
     outlines: bool = True
 
     def summary(self) -> str:
         lines = [
             f"{self.chars} characters with stroke data ({self.readings} readings)",
+            f"{self.duplicate_chars} duplicate character rows in the source, skipped",
             f"{self.phrases} phrases, {self.phrases_dropped} dropped (undrawable characters)",
+            f"{self.duplicate_phrases} duplicate phrase rows in the source, skipped",
             f"{self.chars_without_geometry} characters skipped for having no stroke data",
             f"outlines: {'included' if self.outlines else 'omitted (--medians-only)'}",
         ]
@@ -73,14 +77,20 @@ def build(
         db.unlink()
     store = Store.create(db)
     ranks: dict[str, int] = {}
+    seen: set[int] = set()
 
     for row in rows:
+        codepoint = ord(row.char)
+        if codepoint in seen:
+            report.duplicate_chars += 1
+            continue
+        seen.add(codepoint)
         record = geometry.get(row.char)
         if record is None:
             report.chars_without_geometry += 1
             continue
         store.add_char(
-            ord(row.char),
+            codepoint,
             freq_rank=row.freq_rank,
             nstroke=len(record.medians),
             medians=record.medians,
@@ -89,7 +99,7 @@ def build(
         ranks[row.char] = row.freq_rank
         report.chars += 1
         for reading in row.readings:
-            store.add_reading(reading, ord(row.char))
+            store.add_reading(reading, codepoint)
             report.readings += 1
 
     say("reading word frequencies")
@@ -99,6 +109,7 @@ def build(
         weights = dict(parse_essay(_read_text(essay)))
 
     say("reading the phrase dictionary")
+    seen_phrases: set[tuple[str, str]] = set()
     for line in _read_text(raw_dir / "cedict.txt.gz").splitlines():
         entry = parse_cedict_line(line)
         if entry is None:
@@ -106,6 +117,11 @@ def build(
         if not all(ch in ranks for ch in entry.text):
             report.phrases_dropped += 1
             continue
+        key = (entry.pinyin_key, entry.text)
+        if key in seen_phrases:
+            report.duplicate_phrases += 1
+            continue
+        seen_phrases.add(key)
         weight = weights.get(entry.text)
         if weight is None:
             weight = 1000.0 / (1.0 + mean(ranks[ch] for ch in entry.text))

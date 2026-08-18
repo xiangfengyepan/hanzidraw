@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 from pathlib import Path
 
@@ -10,9 +11,18 @@ from . import __version__
 from .config import data_dir, db_path
 
 
+def _sha256_of(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def _cmd_fetch_data(args: argparse.Namespace) -> int:
     from .data.build import build
     from .data.fetch import FetchError, fetch_all
+    from .data.sources import SOURCES
 
     raw = Path(args.raw_dir) if args.raw_dir else data_dir() / "raw"
     db = Path(args.db) if args.db else db_path()
@@ -20,6 +30,16 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
     if db.exists() and not args.rebuild:
         print(f"{db} already exists; pass --rebuild to build it again")
         return 0
+
+    digests: dict[str, str] = {}
+    to_fetch = []
+    for source in SOURCES:
+        dest = raw / source.filename
+        if not args.refetch and dest.exists() and dest.stat().st_size > 0:
+            digests[source.name] = _sha256_of(dest)
+            print(f"reusing {source.filename} ({dest.stat().st_size / 1e6:.1f} MB)")
+        else:
+            to_fetch.append(source)
 
     last = [-1]
 
@@ -29,12 +49,13 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
             last[0] = pct
             print(f"\rdownloading… {pct:3d}%", end="", flush=True)
 
-    try:
-        digests = fetch_all(raw, progress=progress)
-    except FetchError as exc:
-        print(f"\nfetch failed: {exc}", file=sys.stderr)
-        return 1
-    print("\rdownload complete    ")
+    if to_fetch:
+        try:
+            digests.update(fetch_all(raw, progress=progress, sources=tuple(to_fetch)))
+        except FetchError as exc:
+            print(f"\nfetch failed: {exc}", file=sys.stderr)
+            return 1
+        print("\rdownload complete    ")
 
     report = build(raw, db, medians_only=args.medians_only, digests=digests, log=print)
     print(f"database: {db} ({db.stat().st_size / 1e6:.1f} MB)")
@@ -49,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
     fetch = sub.add_parser("fetch-data", help="download the datasets and build the database")
     fetch.add_argument("--rebuild", action="store_true", help="rebuild even if the database exists")
     fetch.add_argument("--medians-only", action="store_true", help="skip outlines (smaller file)")
+    fetch.add_argument(
+        "--refetch", action="store_true", help="re-download sources even if already present"
+    )
     fetch.add_argument("--raw-dir", default=None)
     fetch.add_argument("--db", default=None)
     fetch.set_defaults(func=_cmd_fetch_data)
