@@ -74,6 +74,12 @@ def parse_path(d: str) -> tuple[Seg, ...]:
         upper = command.upper()
         relative = command.islower()
         count = _ARGS[upper]
+        if count == 0:
+            # Only Z has zero arguments, and its own token is consumed and
+            # handled (with a `continue`) above -- reaching here means the
+            # current token is a stray number left over after a Z, which
+            # `index += count` would never advance past, spinning forever.
+            raise ValueError(f"command {command} takes no arguments; found extra data")
         args = [float(v) for v in tokens[index : index + count]]  # type: ignore[arg-type]
         if len(args) < count:
             raise ValueError(f"command {command} is missing arguments")

@@ -1,6 +1,35 @@
+import threading
+
 import pytest
 
 from hanzidraw.render.svgpath import Seg, outline_to_box, parse_path, svg_transform
+
+
+def _parse_or_fail_fast(d: str, timeout: float = 2.0):
+    """Run ``parse_path(d)`` on a daemon thread so a regression to the G3 hang
+    fails this test after ``timeout`` seconds instead of freezing the run.
+
+    ``Z`` takes zero arguments, so a stray numeric token after it must raise
+    rather than spin forever re-processing the same index -- see
+    ``src/hanzidraw/render/svgpath.py``.
+    """
+    outcome: dict[str, BaseException] = {}
+
+    def run() -> None:
+        try:
+            parse_path(d)
+        except BaseException as exc:  # noqa: BLE001 - capturing across threads
+            outcome["exc"] = exc
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        pytest.fail(
+            f"parse_path({d!r}) did not return within {timeout}s -- "
+            f"regressed to the pre-fix infinite loop on a stray argument after Z"
+        )
+    return outcome.get("exc")
 
 
 def test_moveto_and_lineto_absolute():
@@ -120,3 +149,30 @@ def test_stray_punctuation_is_rejected():
 def test_semicolons_and_parens_are_rejected_too():
     with pytest.raises(ValueError, match=r"\("):
         parse_path("M 0 0 L (5 5)")
+
+
+# G3: Z takes 0 arguments, so index += count never advances past a stray
+# number following it -- 'Z 5', 'z0' and a Z in the middle of a longer path
+# all used to spin forever instead of raising. Each is run under a timeout
+# guard so a regression fails the test suite rather than hanging it.
+
+
+def test_a_coordinate_after_z_is_rejected_not_hung():
+    exc = _parse_or_fail_fast("Z 5")
+    assert isinstance(exc, ValueError), f"expected ValueError, got {exc!r}"
+
+
+def test_a_lowercase_z_followed_by_a_coordinate_is_rejected_not_hung():
+    exc = _parse_or_fail_fast("z0")
+    assert isinstance(exc, ValueError), f"expected ValueError, got {exc!r}"
+
+
+def test_a_coordinate_after_z_mid_path_is_rejected_not_hung():
+    exc = _parse_or_fail_fast("M 0 0 Z 1 L 2 2")
+    assert isinstance(exc, ValueError), f"expected ValueError, got {exc!r}"
+
+
+def test_a_bare_z_is_still_valid():
+    # Sanity check alongside the three hang cases above: Z with nothing
+    # after it is exactly zero arguments, not a stray one -- must not raise.
+    assert parse_path("M 0 0 Z") == (Seg("M", ((0.0, 0.0),)), Seg("Z", ()))

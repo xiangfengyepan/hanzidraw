@@ -322,9 +322,17 @@ def test_a_layout_reload_resizes_the_scrolled_canvas(qtbot, window, tmp_path):
     path.write_text("[glyph]\nsize_px = 80\n", encoding="utf-8")
     window.reload_config(path)
 
-    width, _height = window.canvas.sheet.size_px()
+    width, height = window.canvas.sheet.size_px()
     assert window.canvas.minimumWidth() == math.ceil(width)
     assert window.canvas.minimumWidth() != before
+    # G1: the smaller size_px shrinks the sheet below its old size. Before
+    # the fix, only the *minimum* size followed -- the widget's actual size
+    # (what the QScrollArea sizes its scroll range from) stayed at whatever
+    # it had last grown to, since Qt never shrinks a widget on its own.
+    assert (window.canvas.width(), window.canvas.height()) == (
+        math.ceil(width),
+        math.ceil(height),
+    )
 
 
 def test_scrollbars_appear_exactly_when_the_sheet_exceeds_the_viewport(qtbot, window):
@@ -339,6 +347,67 @@ def test_scrollbars_appear_exactly_when_the_sheet_exceeds_the_viewport(qtbot, wi
     window.resize(sheet_width + 400, 700)
     qtbot.waitUntil(lambda: window.scroll.viewport().width() > sheet_width)
     assert window.scroll.horizontalScrollBar().maximum() == 0
+
+
+def _commit_n(qtbot, window, n):
+    """Commit ``n`` glyphs through the real IME path (type "shi", hit Space).
+
+    Only the resulting sheet geometry matters for the G1 tests below -- which
+    candidate wins each time is irrelevant, so long as exactly one glyph lands
+    per iteration.
+    """
+    for _ in range(n):
+        _type(qtbot, window, "shi")
+        qtbot.keyClick(window, Qt.Key.Key_Space)
+
+
+def test_clear_shrinks_the_widget_and_zeroes_the_scrollbars(qtbot, window):
+    # G1: _sync_size used to call only setMinimumSize, never resize -- so a
+    # widget grown to fit 25 characters never shrank back down when the sheet
+    # was cleared, and the enclosing QScrollArea kept reporting the old,
+    # stale scroll range forever.
+    window.resize(900, 700)
+    window.show()
+    qtbot.waitExposed(window)
+    _commit_n(qtbot, window, 25)
+    vbar = window.scroll.verticalScrollBar()
+    vbar.setValue(vbar.maximum())
+    assert vbar.maximum() > 0  # sanity: the sheet really does exceed the viewport
+
+    qtbot.keyClick(window, Qt.Key.Key_L, Qt.KeyboardModifier.ControlModifier)  # Ctrl+L
+
+    width, height = window.canvas.sheet.size_px()
+    assert (window.canvas.width(), window.canvas.height()) == (
+        math.ceil(width),
+        math.ceil(height),
+    )
+    assert vbar.maximum() == 0
+    assert vbar.value() == 0
+
+
+def test_a_glyph_committed_after_clear_lands_in_the_visible_viewport(qtbot, window):
+    # G1: scrolling to the bottom, clearing with Ctrl+L, and drawing again
+    # used to leave the new glyph painted hundreds of pixels above a viewport
+    # that was still scrolled to where the old (now-gone) content used to be.
+    window.resize(900, 700)
+    window.show()
+    qtbot.waitExposed(window)
+    _commit_n(qtbot, window, 25)
+    vbar = window.scroll.verticalScrollBar()
+    hbar = window.scroll.horizontalScrollBar()
+    vbar.setValue(vbar.maximum())
+    hbar.setValue(hbar.maximum())
+
+    qtbot.keyClick(window, Qt.Key.Key_L, Qt.KeyboardModifier.ControlModifier)  # Ctrl+L
+    _commit_n(qtbot, window, 1)
+
+    placed = window.canvas.sheet.placed[0]
+    viewport = window.scroll.viewport()
+    left, top = hbar.value(), vbar.value()
+    assert left <= placed.ox
+    assert placed.ox + placed.size <= left + viewport.width()
+    assert top <= placed.oy
+    assert placed.oy + placed.size <= top + viewport.height()
 
 
 def test_ctrl_s_exports_the_whole_sheet_not_just_the_visible_viewport(qtbot, tmp_path):

@@ -162,6 +162,12 @@ class MainWindow(QMainWindow):
             self.canvas.undo()  # owns the sheet's carriage too, like clear()
         elif action == "clear":
             self.canvas.clear()
+            # The sheet's width does not shrink on clear (only its height
+            # does, back to one empty row), so a horizontal scroll position
+            # left over from a wide sheet would otherwise survive the clear
+            # and hide the very first glyph drawn afterwards off to the side.
+            self.scroll.horizontalScrollBar().setValue(0)
+            self.scroll.verticalScrollBar().setValue(0)
         elif action == "save":
             target = Path(str(self._cfg.get("output.image.dir"))).expanduser() / "sheet.png"
             try:

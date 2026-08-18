@@ -63,10 +63,12 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
     except (DataFormatError, StoreError) as exc:
         print(f"build failed: {exc}", file=sys.stderr)
         return 1
-    except (OSError, zlib.error, UnicodeDecodeError) as exc:
+    except (OSError, zlib.error, UnicodeDecodeError, EOFError) as exc:
         # A corrupt or truncated cached download is the realistic trigger here
-        # (gzip.BadGzipFile is an OSError); build() tags the offending file onto
-        # the exception so this message can point at the right download.
+        # (gzip.BadGzipFile is an OSError; a gzip stream cut off mid-data raises
+        # the plain builtin EOFError instead, which is not an OSError); build()
+        # tags the offending file onto the exception so this message can point
+        # at the right download.
         # The existing database, if any, is untouched -- build() swaps in a
         # temp file only on success.
         name = failing_source(exc) or raw

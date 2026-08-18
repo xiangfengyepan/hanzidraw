@@ -71,6 +71,14 @@ class CanvasView(QWidget):
             return
         self._sheet_size = size
         self.setMinimumSize(size)
+        # setMinimumSize alone only ever grows the widget: Qt never shrinks a
+        # widget below whatever size it was last resized to just because its
+        # minimum went down. Without this, clearing the sheet (or reloading a
+        # smaller layout) left the widget -- and the enclosing QScrollArea's
+        # scroll range -- exactly as big as it was before, so a scrolled-down
+        # viewport kept showing stale, empty space instead of newly-drawn
+        # glyphs painted at the top of the now-smaller sheet.
+        self.resize(size)
         self.updateGeometry()
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming

@@ -148,6 +148,40 @@ def test_fetch_data_reports_a_message_not_a_traceback_for_a_corrupt_gzip_source(
     assert not db.with_suffix(".sqlite.tmp").exists()
 
 
+def test_fetch_data_reports_a_message_not_a_traceback_for_a_truncated_gzip_source(
+    tmp_path, fixtures, capsys, monkeypatch
+):
+    """G2: gzip raises EOFError for a stream cut off mid-data, not OSError.
+
+    ``is_readable`` only reads the first 64 KB of *decompressed* output, so a
+    cached file that is truncated further in than that still passes the cache
+    check and is reused as-is -- the live route this test drives. Building
+    from it must fail with a message, not an uncaught EOFError traceback.
+    """
+    raw = _raw_without_hanzidb(tmp_path, fixtures)
+    (raw / "hanziDB.csv").write_text(
+        (fixtures / "hanzidb_sample.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    # A gzip stream long enough that its first 64 KB decompressed still reads
+    # back fine even after the file is cut short of its real end -- so
+    # is_readable's cache check (which only peeks at that much) says True.
+    content = ("是十一二三四五六七八九十 CC-CEDICT sample line\n" * 5000).encode("utf-8")
+    full = gzip.compress(content)
+    truncated = full[:-20]  # valid header and body, no end-of-stream marker
+    (raw / "cedict.txt.gz").write_bytes(truncated)
+
+    db = tmp_path / "db.sqlite"
+    rc = cli.main(["fetch-data", "--raw-dir", str(raw), "--db", str(db)])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+    assert "cedict.txt.gz" in captured.err
+    assert not db.exists()
+    assert not db.with_suffix(".sqlite.tmp").exists()
+
+
 def test_fetch_data_refetches_a_corrupt_cached_download(tmp_path, fixtures, capsys, monkeypatch):
     """A non-empty file said nothing about whether it could be read back.
 

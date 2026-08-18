@@ -75,7 +75,7 @@ def _naming(path: Path) -> Iterator[None]:
     """
     try:
         yield
-    except (OSError, zlib.error, UnicodeDecodeError) as exc:
+    except (OSError, zlib.error, UnicodeDecodeError, EOFError) as exc:
         if getattr(exc, _SOURCE_ATTR, None) is None:
             setattr(exc, _SOURCE_ATTR, str(path))
         raise
