@@ -353,9 +353,7 @@ def test_ctrl_s_exports_the_whole_sheet_not_just_the_visible_viewport(qtbot, tmp
         store.add_reading(syl, ord(ch))
     store.finish()
     out_dir = tmp_path / "shots"
-    (tmp_path / "c.toml").write_text(
-        f'[output.image]\ndir = "{out_dir}"\n', encoding="utf-8"
-    )
+    (tmp_path / "c.toml").write_text(f'[output.image]\ndir = "{out_dir}"\n', encoding="utf-8")
     win = MainWindow(
         store=store,
         cfg=load_config(tmp_path / "c.toml"),
@@ -409,9 +407,7 @@ def test_toggling_always_on_top_at_runtime_keeps_the_window_visible(qtbot, windo
     assert not bool(window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
 
 
-def test_a_reload_that_does_not_change_always_on_top_leaves_the_flag_alone(
-    qtbot, window, tmp_path
-):
+def test_a_reload_that_does_not_change_always_on_top_leaves_the_flag_alone(qtbot, window, tmp_path):
     window.show()
     qtbot.waitExposed(window)
     before = window.windowFlags()
@@ -424,9 +420,7 @@ def test_a_reload_that_does_not_change_always_on_top_leaves_the_flag_alone(
     assert window.isVisible()
 
 
-def test_ctrl_s_into_an_unwritable_directory_reports_a_message_not_an_exception(
-    qtbot, tmp_path
-):
+def test_ctrl_s_into_an_unwritable_directory_reports_a_message_not_an_exception(qtbot, tmp_path):
     # I5: save() discarded the boolean from QImage.save(), so a write that
     # failed without raising still printed "saved …"; and an unwritable
     # directory threw straight out of the Qt key handler.
@@ -435,9 +429,7 @@ def test_ctrl_s_into_an_unwritable_directory_reports_a_message_not_an_exception(
 
     ro_dir = tmp_path / "ro"
     ro_dir.mkdir()
-    (tmp_path / "c.toml").write_text(
-        f'[output.image]\ndir = "{ro_dir}"\n', encoding="utf-8"
-    )
+    (tmp_path / "c.toml").write_text(f'[output.image]\ndir = "{ro_dir}"\n', encoding="utf-8")
     store = Store.create(tmp_path / "db.sqlite")
     store.add_char(ord("十"), 10, 2, MEDIANS, None)
     store.add_reading("shi", ord("十"))
@@ -470,9 +462,7 @@ def test_ctrl_s_whose_directory_cannot_be_created_reports_a_message(qtbot, tmp_p
     ro_dir = tmp_path / "ro"
     ro_dir.mkdir()
     target_dir = ro_dir / "nested"
-    (tmp_path / "c.toml").write_text(
-        f'[output.image]\ndir = "{target_dir}"\n', encoding="utf-8"
-    )
+    (tmp_path / "c.toml").write_text(f'[output.image]\ndir = "{target_dir}"\n', encoding="utf-8")
     store = Store.create(tmp_path / "db.sqlite")
     store.add_char(ord("十"), 10, 2, MEDIANS, None)
     store.add_reading("shi", ord("十"))
@@ -497,9 +487,7 @@ def test_ctrl_s_whose_directory_cannot_be_created_reports_a_message(qtbot, tmp_p
 
 def test_ctrl_s_reports_success_only_when_the_file_is_really_written(qtbot, tmp_path):
     out_dir = tmp_path / "shots"
-    (tmp_path / "c.toml").write_text(
-        f'[output.image]\ndir = "{out_dir}"\n', encoding="utf-8"
-    )
+    (tmp_path / "c.toml").write_text(f'[output.image]\ndir = "{out_dir}"\n', encoding="utf-8")
     store = Store.create(tmp_path / "db.sqlite")
     store.add_char(ord("十"), 10, 2, MEDIANS, None)
     store.add_reading("shi", ord("十"))
@@ -517,3 +505,56 @@ def test_ctrl_s_reports_success_only_when_the_file_is_really_written(qtbot, tmp_
     saved = out_dir / "sheet.png"
     assert saved.exists() and saved.stat().st_size > 0
     assert win.statusBar().currentMessage() == f"saved {saved}"
+
+
+def test_an_aborted_mouse_draw_does_not_advance_the_carriage(qtbot, tmp_path, monkeypatch):
+    # The sheet used to be advanced before draw_glyph could raise MouseAbort,
+    # so an aborted draw left an empty cell behind and the next character
+    # landed one cell further along than the user could see.
+    from hanzidraw.output.mouse import MouseBackend
+
+    class _Pointer:
+        position = (0.0, 0.0)
+
+        def move_to(self, x, y):
+            raise AssertionError("the guard must refuse before touching the pointer")
+
+        def press(self):
+            raise AssertionError("the guard must refuse before pressing")
+
+        def release(self):
+            pass
+
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("十"), 10, 2, MEDIANS, None)
+    store.add_reading("shi", ord("十"))
+    store.finish()
+    win = MainWindow(
+        store=store,
+        cfg=load_config(tmp_path / "none.toml"),
+        learn_path=tmp_path / "learn.json",
+    )
+    qtbot.addWidget(win)
+    aborting = MouseBackend(
+        _Pointer(),
+        sleep=lambda _s: None,
+        window_rect=lambda: (0.0, 0.0, 10_000.0, 10_000.0),  # everything overlaps us
+    )
+    monkeypatch.setattr(win, "_backend", lambda: aborting)
+
+    _type(qtbot, win, "shi")
+    qtbot.keyClick(win, Qt.Key.Key_Space)
+
+    assert "overlaps" in win.statusBar().currentMessage()
+    assert win.canvas.sheet.placed == ()  # the carriage never moved
+
+
+def test_a_completed_draw_still_advances_the_carriage(qtbot, window):
+    _type(qtbot, window, "shi")
+    qtbot.keyClick(window, Qt.Key.Key_2)
+    assert len(window.canvas.sheet.placed) == 1
+    _type(qtbot, window, "shi")
+    qtbot.keyClick(window, Qt.Key.Key_2)
+    placed = window.canvas.sheet.placed
+    assert len(placed) == 2
+    assert placed[1].ox == pytest.approx(placed[0].ox + window.canvas.sheet.pitch)

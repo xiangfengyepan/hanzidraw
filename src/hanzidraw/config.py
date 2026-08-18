@@ -7,6 +7,7 @@ Validation never raises: a bad value is replaced by its default and recorded in
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -45,7 +46,7 @@ DEFAULTS: dict[str, Any] = {
     "output": {
         "backend": "canvas",
         "mouse": {"scale": 1.0, "step_delay_ms": 4, "button": "left", "clamp_to_screen": True},
-        "image": {"dir": "~/Pictures/hanzidraw", "format": "png"},
+        "image": {"dir": "~/Pictures/hanzidraw"},
     },
     "theme": {"preset": "ink"},
 }
@@ -73,7 +74,6 @@ _CHOICES = {
     "canvas.grid": ("none", "tian", "mi", "cross"),
     "output.backend": ("canvas", "mouse", "image"),
     "output.mouse.button": ("left", "right", "middle"),
-    "output.image.format": ("png", "svg"),
     "theme.preset": tuple(PRESETS),
 }
 
@@ -89,6 +89,45 @@ _POSITIVE = (
 )
 
 _NON_NEGATIVE = ("glyph.animation.gap_ms", "output.mouse.step_delay_ms")
+
+_COLOURS = ("glyph.color", "glyph.outline_color", "canvas.background", "canvas.grid_color")
+
+# A single colour, as #rgb / #rrggbb or one of the basic CSS names every
+# renderer here (Qt and SVG alike) understands. The two-colour gradient form the
+# README once advertised is withdrawn: it was accepted without complaint and
+# then stringified into stroke="['#c0392b', '#f39c12']", so the strokes silently
+# disappeared and the GUI got an invalid QColor.
+_HEX_COLOUR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_NAMED_COLOURS = frozenset(
+    (
+        "black",
+        "silver",
+        "gray",
+        "grey",
+        "white",
+        "maroon",
+        "red",
+        "purple",
+        "fuchsia",
+        "magenta",
+        "green",
+        "lime",
+        "olive",
+        "yellow",
+        "navy",
+        "blue",
+        "teal",
+        "aqua",
+        "cyan",
+        "orange",
+    )
+)
+
+
+def _is_colour(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    return bool(_HEX_COLOUR.match(value)) or value.lower() in _NAMED_COLOURS
 
 
 def _is_windows() -> bool:
@@ -123,17 +162,6 @@ def _deep_merge(base: dict, over: dict) -> dict:
         else:
             out[k] = v
     return out
-
-
-def _walk(d: dict, prefix: str = "") -> list[tuple[str, Any]]:
-    items: list[tuple[str, Any]] = []
-    for k, v in d.items():
-        key = f"{prefix}{k}"
-        if isinstance(v, dict):
-            items += _walk(v, key + ".")
-        else:
-            items.append((key, v))
-    return items
 
 
 def _dig(d: dict, dotted: str) -> Any:
@@ -234,6 +262,14 @@ def _validate(merged: dict) -> list[str]:
         if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
             errors.append(f"{key}: expected a number of 0 or more, got {value!r}")
             _put(merged, key, _dig(DEFAULTS, key))
+    for key in _COLOURS:
+        value = _dig(merged, key)
+        if not _is_colour(value):
+            errors.append(
+                f'{key}: expected one colour, as "#rgb", "#rrggbb" or a basic '
+                f"colour name, got {value!r}"
+            )
+            _put(merged, key, _dig(DEFAULTS, key))
     return errors
 
 
@@ -255,11 +291,19 @@ def load_config(path: Path | None = None) -> Config:
     warnings.extend(struct_warnings)
 
     # Get preset name from cleaned user config
-    preset_name = DEFAULTS["theme"]["preset"]
+    default_preset = DEFAULTS["theme"]["preset"]
+    preset_name = default_preset
     if "theme" in filtered_user and isinstance(filtered_user.get("theme"), dict):
         preset_name = filtered_user["theme"].get("preset", preset_name)
 
-    preset = PRESETS.get(preset_name, {})
+    if preset_name not in PRESETS:
+        # A bogus name used to merge *no* preset at all, so the user silently got
+        # bare defaults instead of the theme they thought they had chosen. Fall
+        # back to the default preset here; _validate reports the named error and
+        # resets the key itself, so this stays one message, not two.
+        preset_name = default_preset
+
+    preset = PRESETS[preset_name]
     merged = _deep_merge(_deep_merge(DEFAULTS, preset), filtered_user)
     errors += _validate(merged)
     return Config(data=merged, errors=tuple(errors), warnings=tuple(warnings), path=path)

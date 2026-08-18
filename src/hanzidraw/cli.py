@@ -101,6 +101,17 @@ def _cmd_draw(args: argparse.Namespace) -> int:
         print("nothing to draw: no characters given", file=sys.stderr)
         return 1
 
+    out = Path(args.output)
+    suffix = out.suffix.lower()
+    if suffix not in (".svg", ".png"):
+        # Writing SVG under a .txt name was the old behaviour: the suffix is
+        # what chooses the format, so an unknown one has no answer.
+        print(
+            f"-o must end in .svg or .png, got {args.output!r}",
+            file=sys.stderr,
+        )
+        return 1
+
     advance = size * float(cfg.get("canvas.advance"))
 
     try:
@@ -128,10 +139,14 @@ def _cmd_draw(args: argparse.Namespace) -> int:
     )
     pad = (advance - size) / 2.0
     outline_style = str(cfg.get("glyph.style")) == "outline"
+    # Spec §6: stroke-order numbers belong to `single` mode -- a whole sheet of
+    # numbered practice cells is unreadable.
+    numbers = bool(cfg.get("glyph.stroke_numbers")) and str(cfg.get("canvas.mode")) == "single"
     for index, ch in enumerate(chars):
         ox = pad + advance * (index % columns)
         oy = pad + advance * (index // columns)
         codepoint = ord(ch)
+        glyph = load_glyph(store, codepoint)
         outline = store.outline(codepoint) if outline_style else None
         if outline:
             backend.begin_glyph(ox, oy, size)
@@ -141,7 +156,9 @@ def _cmd_draw(args: argparse.Namespace) -> int:
             # No outline for this character (mixed database), or the whole
             # database was built --medians-only: draw it rather than skip
             # it, so a mixed database still renders everything.
-            draw_glyph(backend, load_glyph(store, codepoint), ox, oy, size)
+            draw_glyph(backend, glyph, ox, oy, size)
+        if numbers:
+            backend.stroke_numbers(glyph, ox, oy, size)
 
     if outline_style and store.get_meta("build_medians_only") == "1":
         print(
@@ -150,9 +167,8 @@ def _cmd_draw(args: argparse.Namespace) -> int:
             "(without --medians-only) for the real contour."
         )
 
-    out = Path(args.output)
     try:
-        if out.suffix.lower() == ".png":
+        if suffix == ".png":
             save_png(backend, out)
         else:
             backend.save(out)

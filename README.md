@@ -169,13 +169,13 @@ after the first use.
 | F2 | toggle `sheet` / `single` canvas mode |
 | Ctrl+Z / Ctrl+L | undo the last glyph / clear the sheet |
 | Ctrl+S | export the sheet |
-| Ctrl+. | abort an in-progress mouse draw (the `MS_STOP` equivalent) |
+| Ctrl+. (or Esc) | abort an in-progress mouse draw (the `MS_STOP` equivalent) |
 | Ctrl+R | replay the current glyph (`single` mode) |
 | Ctrl+] / Ctrl+[ | step one stroke forward / back (`single` mode) |
 
-The abort key (Ctrl+.) is the one binding that also works while another
-application has focus, and only for the duration of a `mouse` draw — see
-Output backends below.
+The abort keys (Ctrl+. and Esc) are the one binding that also works while
+another application has focus, and only for the duration of a `mouse` draw —
+see Output backends below.
 
 ## Configuration
 
@@ -207,10 +207,12 @@ style = "brush"               # brush (constant-width strokes, what the
                                # typographic contour, swelling and tapering)
 size_px = 240
 stroke_width_px = 14
-color = "#111111"              # or ["#c0392b", "#f39c12"] for a gradient
+color = "#111111"              # one colour: "#rgb", "#rrggbb" or a basic
+                               # colour name (red, black, navy, …)
 outline_color = "#cccccc"      # colour of the not-yet-drawn ghost outline
 show_pending_outline = true    # ghost of the full character while it draws
-stroke_numbers = false
+stroke_numbers = false         # number each stroke at its start, in
+                               # canvas mode "single" only
 
 [glyph.animation]
 enabled = true
@@ -252,8 +254,7 @@ button = "left"
 clamp_to_screen = true
 
 [output.image]
-dir = "~/Pictures/hanzidraw"
-format = "png"                  # png | svg
+dir = "~/Pictures/hanzidraw"    # where Ctrl+S writes sheet.png
 
 [theme]
 preset = "ink"                  # ink | neon | chalk | none
@@ -276,8 +277,9 @@ Three ways for a committed glyph to actually appear, chosen with
 - **`mouse`** — draws into whatever application currently has focus by moving
   the real pointer, pressing the button for the duration of each stroke, and
   releasing between strokes, mirroring the firmware's own draw engine. Needs
-  the `mouse` extra (`pynput`). Refuses to start if hanzidraw's own window is
-  the one focused.
+  the `mouse` extra (`pynput`). Refuses to draw into a cell that hanzidraw's
+  own window overlaps, because the one thing a synthetic drag must not do is
+  land on our own UI.
 
   **Known limitation, left for a future session:** the mouse backend draws
   each glyph at an **absolute** canvas position, not relative to wherever the
@@ -288,8 +290,9 @@ Three ways for a committed glyph to actually appear, chosen with
   thing to revisit before relying on the `mouse` backend day to day.
 
   Because a synthetic pointer that will not stop is hostile, every mouse draw
-  has **three independent** ways to abort: the Ctrl+. key (via a temporary,
-  narrowly-scoped listener that exists only while a draw is in progress),
+  has **three independent** ways to abort: the Ctrl+. key — or Esc, accepted as
+  a second panic key — via a temporary, narrowly-scoped listener that exists
+  only while a draw is in progress;
   a hard per-glyph deadline, and detecting that the real pointer moved away
   from where hanzidraw last put it (you grabbed the mouse). Whichever one
   fires, the mouse button is released on every exit path — no draw can leave
@@ -315,6 +318,9 @@ per-stroke timing:
 hanzidraw draw 沣潘叶祥 -o out.svg
 hanzidraw draw 沣潘叶祥 -o out.png     # needs the gui extra
 ```
+
+The output suffix chooses the format, so it has to be `.svg` or `.png`;
+anything else is a validation error rather than an SVG under a misleading name.
 
 Reads the same `config.toml` as the GUI (`--config PATH` to override, `--db
 PATH` for a non-default database), and the same `--size`, `--color`,

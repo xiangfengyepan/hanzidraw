@@ -1,9 +1,11 @@
+import sys
 import threading
+import types
 
 import pytest
 
 from hanzidraw.output.base import draw_glyph
-from hanzidraw.output.mouse import MouseAbort, MouseBackend
+from hanzidraw.output.mouse import ABORT_KEY, MouseAbort, MouseBackend, listen_for_abort
 from hanzidraw.render.glyph import Glyph
 
 GLYPH = Glyph((((0.0, 0.0), (1.0, 0.0)), ((0.0, 1.0), (1.0, 1.0))))
@@ -259,3 +261,187 @@ def test_listen_for_abort_is_a_no_op_without_pynput(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", fake_import)
     stop = mouse.listen_for_abort(MouseBackend(FakePointer(), sleep=lambda _s: None))
     stop()  # must not raise
+
+
+# ---- I2: the guard the spec promised (amended: geometric, not focus-based) ----
+
+
+def test_a_target_cell_overlapping_our_own_window_refuses_to_draw():
+    pointer = FakePointer()
+    backend = _backend(pointer, window_rect=lambda: (0.0, 0.0, 500.0, 400.0))
+
+    with pytest.raises(MouseAbort) as exc:
+        draw_glyph(backend, GLYPH, 100.0, 100.0, 100.0)
+
+    assert "window" in str(exc.value)
+    assert pointer.events == []  # nothing pressed, nothing moved
+
+
+def test_a_target_cell_clear_of_our_window_draws_normally():
+    pointer = FakePointer()
+    backend = _backend(pointer, window_rect=lambda: (0.0, 0.0, 500.0, 400.0))
+
+    draw_glyph(backend, GLYPH, 600.0, 500.0, 100.0)
+
+    assert ("press",) in pointer.events
+
+
+def test_the_overlap_guard_compares_the_scaled_cell_not_the_raw_one():
+    # scale is applied before the comparison, exactly as it is before clamping:
+    # a cell that clears the window unscaled can still land on it at scale 4.
+    pointer = FakePointer()
+    clear = _backend(pointer, window_rect=lambda: (0.0, 0.0, 300.0, 300.0))
+    draw_glyph(clear, GLYPH, 400.0, 400.0, 100.0)
+    assert ("press",) in pointer.events
+
+    scaled = _backend(FakePointer(), scale=0.5, window_rect=lambda: (0.0, 0.0, 300.0, 300.0))
+    with pytest.raises(MouseAbort):
+        draw_glyph(scaled, GLYPH, 400.0, 400.0, 100.0)
+
+
+def test_no_window_rect_means_no_overlap_guard():
+    pointer = FakePointer()
+    draw_glyph(_backend(pointer), GLYPH, 0.0, 0.0, 100.0)
+    assert ("press",) in pointer.events
+
+
+# ---- the global abort key: Ctrl+. as documented, Esc as a second panic key ----
+
+
+class _FakeKey:
+    """Stand-in for pynput.keyboard.Key.<name>."""
+
+    def __init__(self, name):
+        self.name = name
+
+    def __eq__(self, other):
+        return isinstance(other, _FakeKey) and other.name == self.name
+
+    def __hash__(self):
+        return hash(("key", self.name))
+
+
+class _FakeKeyCode:
+    """Stand-in for pynput.keyboard.KeyCode."""
+
+    def __init__(self, char):
+        self.char = char
+
+    def __eq__(self, other):
+        return isinstance(other, _FakeKeyCode) and other.char == self.char
+
+    def __hash__(self):
+        return hash(("code", self.char))
+
+    @classmethod
+    def from_char(cls, char):
+        return cls(char)
+
+
+class _FakeListener:
+    def __init__(self, on_press=None, on_release=None):
+        self.on_press = on_press
+        self.on_release = on_release
+        self.stopped = False
+
+    def start(self):
+        pass
+
+    def stop(self):
+        self.stopped = True
+
+
+def _install_fake_pynput(monkeypatch):
+    """A fake pynput.keyboard, so the listener's wiring can be tested at all.
+
+    pynput is not installed in this environment and must never be driven for
+    real in a test anyway (it would grab the machine's actual keyboard).
+    """
+    keyboard = types.SimpleNamespace(
+        Key=types.SimpleNamespace(
+            esc=_FakeKey("esc"),
+            ctrl=_FakeKey("ctrl"),
+            ctrl_l=_FakeKey("ctrl_l"),
+            ctrl_r=_FakeKey("ctrl_r"),
+        ),
+        KeyCode=_FakeKeyCode,
+        Listener=_FakeListener,
+    )
+    module = types.ModuleType("pynput")
+    module.keyboard = keyboard
+    monkeypatch.setitem(sys.modules, "pynput", module)
+    monkeypatch.setitem(sys.modules, "pynput.keyboard", keyboard)
+    return keyboard
+
+
+def _listener_of(backend, **kw):
+    listeners = []
+    original = _FakeListener.__init__
+
+    def capture(self, *a, **k):
+        original(self, *a, **k)
+        listeners.append(self)
+
+    _FakeListener.__init__ = capture
+    try:
+        stop = listen_for_abort(backend, **kw)
+    finally:
+        _FakeListener.__init__ = original
+    return listeners[-1], stop
+
+
+def test_the_global_abort_listener_honours_the_documented_ctrl_dot(monkeypatch):
+    keyboard = _install_fake_pynput(monkeypatch)
+    backend = _backend(FakePointer())
+    listener, _stop = _listener_of(backend)
+
+    listener.on_press(_FakeKeyCode("."))  # "." alone is not the abort key
+    assert not backend._abort.is_set()
+
+    listener.on_press(keyboard.Key.ctrl)
+    listener.on_press(_FakeKeyCode("."))
+    assert backend._abort.is_set()
+
+
+def test_releasing_ctrl_disarms_the_combination(monkeypatch):
+    keyboard = _install_fake_pynput(monkeypatch)
+    backend = _backend(FakePointer())
+    listener, _stop = _listener_of(backend)
+
+    listener.on_press(keyboard.Key.ctrl_l)
+    listener.on_release(keyboard.Key.ctrl_l)
+    listener.on_press(_FakeKeyCode("."))
+    assert not backend._abort.is_set()
+
+
+def test_esc_stays_a_second_panic_key(monkeypatch):
+    keyboard = _install_fake_pynput(monkeypatch)
+    backend = _backend(FakePointer())
+    listener, _stop = _listener_of(backend)
+
+    listener.on_press(keyboard.Key.esc)
+    assert backend._abort.is_set()
+
+
+def test_the_key_parameter_is_honoured_rather_than_ignored(monkeypatch):
+    # It used to be accepted and then thrown away, with Key.esc hard-coded --
+    # so a user pressing the documented Ctrl+. got nothing at all.
+    _install_fake_pynput(monkeypatch)
+    backend = _backend(FakePointer())
+    listener, _stop = _listener_of(backend, key="q")
+
+    listener.on_press(_FakeKeyCode("."))
+    assert not backend._abort.is_set()
+    listener.on_press(_FakeKeyCode("q"))
+    assert backend._abort.is_set()
+
+
+def test_the_default_abort_key_is_the_documented_one():
+    assert ABORT_KEY == "ctrl+."
+
+
+def test_stop_stops_the_listener(monkeypatch):
+    _install_fake_pynput(monkeypatch)
+    listener, stop = _listener_of(_backend(FakePointer()))
+    stop()
+    assert listener.stopped

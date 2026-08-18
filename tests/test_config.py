@@ -1,6 +1,8 @@
 import textwrap
 
-from hanzidraw.config import DEFAULTS, Config, load_config
+import pytest
+
+from hanzidraw.config import DEFAULTS, PRESETS, Config, load_config
 
 
 def test_defaults_are_returned_when_no_file(tmp_path):
@@ -180,3 +182,71 @@ def test_scalar_expected_but_table_provided(tmp_path):
     assert len(cfg.errors) == 1
     assert "glyph.size_px" in cfg.errors[0]
     assert "section" in cfg.errors[0] or "value" in cfg.errors[0]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        '["#c0392b", "#f39c12"]',  # the README's old gradient promise
+        "12",  # not a string at all
+        '"#12345"',  # malformed hex
+        '"rebeccapurple"',  # a name outside the accepted set
+    ],
+)
+def test_a_colour_that_is_not_a_usable_colour_is_a_reported_error(tmp_path, value):
+    # The gradient form was accepted and then stringified into
+    # stroke="['#c0392b', '#f39c12']", which is invalid SVG, so the strokes
+    # silently vanished and the GUI got an invalid QColor.
+    path = tmp_path / "c.toml"
+    path.write_text(f"[glyph]\ncolor = {value}\n", encoding="utf-8")
+    cfg = load_config(path)
+    assert any("glyph.color" in e for e in cfg.errors), cfg.errors
+    assert cfg.get("glyph.color") == DEFAULTS["glyph"]["color"]
+
+
+@pytest.mark.parametrize("value", ["#fff", "#FFFFFF", "#111111", "red", "black"])
+def test_a_usable_colour_is_accepted(tmp_path, value):
+    path = tmp_path / "c.toml"
+    path.write_text(f'[glyph]\ncolor = "{value}"\n', encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.errors == ()
+    assert cfg.get("glyph.color") == value
+
+
+def test_every_colour_key_is_validated_not_just_glyph_color(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(
+        '[glyph]\noutline_color = "nope"\n[canvas]\nbackground = 3\ngrid_color = "#gg0000"\n',
+        encoding="utf-8",
+    )
+    cfg = load_config(path)
+    for key in ("glyph.outline_color", "canvas.background", "canvas.grid_color"):
+        assert any(key in e for e in cfg.errors), (key, cfg.errors)
+
+
+def test_output_image_format_is_gone(tmp_path):
+    # Withdrawn in the final review: it was validated and never read; `draw`
+    # decides the format from the output suffix.
+    assert "format" not in DEFAULTS["output"]["image"]
+    path = tmp_path / "c.toml"
+    path.write_text('[output.image]\nformat = "png"\n', encoding="utf-8")
+    cfg = load_config(path)
+    assert any("output.image.format" in w for w in cfg.warnings), cfg.warnings
+
+
+def test_a_bogus_theme_preset_is_a_named_error_and_uses_the_default_preset(tmp_path):
+    # Deferred minor #3: the bogus name merged *no* preset (PRESETS.get(name, {}))
+    # and was only reported afterwards, so the merge fell through to bare
+    # defaults. Today the default preset ("ink") happens to carry the same
+    # values as DEFAULTS, which is exactly why this needs pinning rather than
+    # eyeballing: comparing against a real default-preset load keeps it honest
+    # if either side ever changes.
+    bogus = tmp_path / "bogus.toml"
+    bogus.write_text('[theme]\npreset = "sparkles"\n', encoding="utf-8")
+    default = tmp_path / "default.toml"
+    default.write_text(f'[theme]\npreset = "{DEFAULTS["theme"]["preset"]}"\n', encoding="utf-8")
+
+    cfg = load_config(bogus)
+    assert any("theme.preset" in e for e in cfg.errors), cfg.errors
+    assert cfg.data == load_config(default).data
+    assert PRESETS[DEFAULTS["theme"]["preset"]] is not None  # the preset really exists

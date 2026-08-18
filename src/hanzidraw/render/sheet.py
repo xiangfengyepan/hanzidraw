@@ -56,6 +56,15 @@ class Sheet:
         pad = (self.pitch - self.size) / 2.0
         return (pad + col * self.pitch, pad + row * self.pitch)
 
+    def next_origin(self) -> tuple[float, float]:
+        """Where the next glyph will land, without placing it.
+
+        Callers that must draw *before* committing to the cell (the mouse
+        backend can abort mid-draw, and an aborted draw must not advance the
+        carriage) need the origin without the side effect.
+        """
+        return self._origin(len(self._placed))
+
     def add(self, glyph: Glyph, text: str) -> Placed:
         ox, oy = self._origin(len(self._placed))
         placed = Placed(glyph=glyph, text=text, ox=ox, oy=oy, size=self.size)

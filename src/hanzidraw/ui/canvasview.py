@@ -10,6 +10,7 @@ from PySide6.QtCore import QPointF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
+from ..output.image import STROKE_NUMBER_FRACTION
 from ..render.animator import Timeline, Timing
 from ..render.glyph import Glyph
 from ..render.sheet import Sheet
@@ -168,6 +169,17 @@ class CanvasView(QWidget):
         self._sync_size()
         self.update()
 
+    def next_cell(self) -> tuple[float, float, float]:
+        """The (ox, oy, size) box the next glyph will occupy, without claiming it."""
+        ox, oy = self._sheet.next_origin()
+        return (ox, oy, self._sheet.size)
+
+    def advance(self, glyph: Glyph, text: str):
+        """Claim the next cell for a glyph that has actually been drawn."""
+        placed = self._sheet.add(glyph, text)
+        self._sync_size()
+        return placed
+
     def undo(self) -> None:
         self._timer.stop()
         if self._current is not None:
@@ -286,6 +298,29 @@ class CanvasView(QWidget):
                     path.closeSubpath()
         return path
 
+    def _paint_stroke_numbers(self, painter: QPainter, color: str) -> None:
+        """Number each stroke at its first median point.
+
+        ``single`` mode only, per spec §6 -- a whole sheet of numbered practice
+        cells is unreadable. The size fraction is shared with the SVG backend so
+        the numbers look the same whichever renderer draws them.
+        """
+        if self._current is None:
+            return
+        size = self._current_box[2] or self._sheet.size
+        font_px = max(6.0, size * STROKE_NUMBER_FRACTION)
+        font = painter.font()
+        font.setPixelSize(int(round(font_px)))
+        painter.save()
+        painter.setFont(font)
+        painter.setPen(QPen(QColor(color)))
+        for index, stroke in enumerate(self._current.strokes, start=1):
+            if not stroke:
+                continue
+            x, y = stroke[0]
+            painter.drawText(QPointF(x + font_px * 0.35, y - font_px * 0.35), str(index))
+        painter.restore()
+
     def _paint_outline(self, painter, glyph, outline, box, color) -> None:
         """Fill the contour progressively: clip to it, then sweep along the median."""
         ox, oy, size = box
@@ -345,3 +380,6 @@ class CanvasView(QWidget):
                 )
             else:
                 painter.drawPath(self._path(visible.strokes))
+
+        if self._mode == "single" and cfg and bool(cfg.get("glyph.stroke_numbers")):
+            self._paint_stroke_numbers(painter, color)

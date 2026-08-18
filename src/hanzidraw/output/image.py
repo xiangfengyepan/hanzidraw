@@ -6,8 +6,12 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from ..render.glyph import Point
+from ..render.glyph import Glyph, Point, place
 from .base import Style
+
+# Stroke-order numbers are drawn at a fixed fraction of the cell size, so they
+# stay legible at any glyph.size_px without another configuration knob.
+STROKE_NUMBER_FRACTION = 0.09
 
 
 def _num(v: float) -> str:
@@ -41,6 +45,24 @@ class SvgBackend:
             self._parts.append(
                 f'<path d="{raw}" transform="{transform}" '
                 f'fill="{self.style.color}" stroke="none" />'
+            )
+
+    def stroke_numbers(self, glyph: Glyph, ox: float, oy: float, size: float) -> None:
+        """Number each stroke at its first median point (``single`` mode only).
+
+        The wrapping group is ``fill="none" stroke=<ink>``, which would render
+        a label as a fat outline of a digit, so each ``<text>`` sets its own
+        fill and turns the stroke off.
+        """
+        font = max(6.0, size * STROKE_NUMBER_FRACTION)
+        for index, stroke in enumerate(place(glyph, ox, oy, size).strokes, start=1):
+            if not stroke:
+                continue
+            x, y = stroke[0]
+            self._parts.append(
+                f'<text x="{_num(x + font * 0.35)}" y="{_num(y - font * 0.35)}" '
+                f'font-size="{_num(font)}" fill="{self.style.color}" '
+                f'stroke="none">{index}</text>'
             )
 
     def to_svg(self) -> str:

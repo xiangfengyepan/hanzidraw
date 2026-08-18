@@ -203,3 +203,31 @@ def test_configure_clears_and_reports_it_when_layout_changes(view, tmp_path):
 
     assert cleared is True
     assert view.glyph_count == 0
+
+
+NUMBERED = Glyph((((20.0, 60.0), (180.0, 60.0)), ((20.0, 140.0), (180.0, 140.0))))
+
+
+def _render_bytes(qtbot, tmp_path, *, mode, numbers):
+    name = f"{mode}-{numbers}.toml"
+    (tmp_path / name).write_text(
+        f"[glyph]\nstroke_numbers = {str(numbers).lower()}\n"
+        f'[glyph.animation]\nenabled = false\n[canvas]\nmode = "{mode}"\n',
+        encoding="utf-8",
+    )
+    view = CanvasView()
+    view.configure(load_config(tmp_path / name))
+    qtbot.addWidget(view)
+    view.commit(NUMBERED, "十", 0.0, 0.0, 240.0)
+    return bytes(view.grab().toImage().constBits())
+
+
+def test_stroke_numbers_are_painted_in_single_mode_and_only_there(qtbot, tmp_path):
+    # glyph.stroke_numbers was documented and never implemented in either
+    # renderer. Spec §6 scopes it to `single` mode.
+    assert _render_bytes(qtbot, tmp_path, mode="single", numbers=True) != _render_bytes(
+        qtbot, tmp_path, mode="single", numbers=False
+    )
+    assert _render_bytes(qtbot, tmp_path, mode="sheet", numbers=True) == _render_bytes(
+        qtbot, tmp_path, mode="sheet", numbers=False
+    )

@@ -19,6 +19,9 @@ from typing import Protocol
 
 from ..render.glyph import Point
 
+#: The documented global panic combination (README key table and spec §8).
+ABORT_KEY = "ctrl+."
+
 
 class MouseAbort(Exception):
     """The draw was stopped before it finished."""
@@ -69,6 +72,7 @@ class MouseBackend:
         monotonic: Callable[[], float] = time.monotonic,
         abort: threading.Event | None = None,
         drift_px: float = 40.0,
+        window_rect: Callable[[], tuple[float, float, float, float]] | None = None,
     ) -> None:
         self._p = pointer
         self._scale = scale
@@ -79,6 +83,7 @@ class MouseBackend:
         self._monotonic = monotonic
         self._abort = abort or threading.Event()
         self._drift = drift_px
+        self._window_rect = window_rect
         self._down = False
         self._started = 0.0
         self._expected: Point = (0.0, 0.0)
@@ -86,8 +91,8 @@ class MouseBackend:
     # ---- Backend protocol ----
 
     def begin_glyph(self, ox: float, oy: float, size: float) -> None:
-        del ox, oy, size
         self._started = self._monotonic()
+        self._check_window_overlap(ox, oy, size)
 
     def stroke(self, points: Sequence[Point]) -> None:
         if not points:
@@ -160,6 +165,28 @@ class MouseBackend:
         if (self._monotonic() - self._started) * 1000.0 > self._deadline_ms:
             raise MouseAbort("draw took too long and was stopped")
 
+    def _check_window_overlap(self, ox: float, oy: float, size: float) -> None:
+        """Refuse to synthesize a drag on top of our own UI.
+
+        Spec §8 originally said "refuses to start when the focused window is our
+        own", which can never work: composition only happens while our window
+        *has* focus, so that guard would disable the feature outright. The real
+        hazard is dragging the button across our own window, so the check is
+        geometric -- the target cell must not intersect our frame. The cell is
+        compared in pointer space (scale and clamp applied), because that is
+        where the pointer will actually go.
+        """
+        if self._window_rect is None:
+            return
+        x0, y0 = self._transform((ox, oy))
+        x1, y1 = self._transform((ox + size, oy + size))
+        wx0, wy0, wx1, wy1 = self._window_rect()
+        if x0 <= wx1 and wx0 <= x1 and y0 <= wy1 and wy0 <= y1:
+            raise MouseAbort(
+                "the target cell overlaps hanzidraw's own window; move the window "
+                "or the target application out of the way before drawing"
+            )
+
     def _check_drift(self) -> None:
         where = self._p.position
         dx = abs(where[0] - self._expected[0])
@@ -168,17 +195,51 @@ class MouseBackend:
             raise MouseAbort("the pointer moved on its own; draw stopped")
 
 
-def listen_for_abort(backend: MouseBackend, key: str = "esc"):
-    """Temporary global listener, alive only while a draw runs. Returns a stop callable."""
+def _parse_hotkey(key: str) -> tuple[bool, str]:
+    """``"ctrl+."`` -> ``(True, ".")``; a bare name needs no modifier."""
+    parts = [part.strip().lower() for part in key.split("+") if part.strip()]
+    if not parts:
+        return (False, "")
+    return ("ctrl" in parts[:-1], parts[-1])
+
+
+def listen_for_abort(backend: MouseBackend, key: str = ABORT_KEY):
+    """Temporary global listener, alive only while a draw runs. Returns a stop callable.
+
+    ``key`` defaults to the documented ``Ctrl+.`` and is now actually honoured:
+    it used to be accepted and then discarded, with ``Key.esc`` hard-coded, so a
+    user watching a runaway pointer and pressing the key the README documents got
+    nothing. ``Esc`` still aborts as well -- a panic button should be generous,
+    not exclusive -- and the deadline and drift aborts are untouched.
+    """
     try:
         from pynput import keyboard  # noqa: PLC0415
     except ImportError:
         return lambda: None
 
+    needs_ctrl, wanted = _parse_hotkey(key)
+    wanted_code = keyboard.KeyCode.from_char(wanted) if len(wanted) == 1 else None
+    ctrl_keys = {keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r}
+    held = {"ctrl": False}
+
+    def is_wanted(pressed) -> bool:
+        if needs_ctrl and not held["ctrl"]:
+            return False
+        if wanted_code is not None and pressed == wanted_code:
+            return True
+        return bool(wanted) and getattr(pressed, "char", None) == wanted
+
     def on_press(pressed) -> None:
-        if pressed == keyboard.Key.esc:
+        if pressed in ctrl_keys:
+            held["ctrl"] = True
+            return
+        if pressed == keyboard.Key.esc or is_wanted(pressed):
             backend.stop()
 
-    listener = keyboard.Listener(on_press=on_press)
+    def on_release(pressed) -> None:
+        if pressed in ctrl_keys:
+            held["ctrl"] = False
+
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
     return listener.stop

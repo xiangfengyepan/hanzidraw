@@ -198,3 +198,67 @@ def test_outline_mode_svg_output_is_byte_stable(tmp_path):
     cli.main(["draw", "沣", "-o", str(out2), "--db", str(db), "--config", str(cfg_path)])
 
     assert out1.read_text(encoding="utf-8") == out2.read_text(encoding="utf-8")
+
+
+def test_stroke_numbers_label_every_stroke_in_single_mode(tmp_path, capsys):
+    # glyph.stroke_numbers was documented in spec §6 and the README and never
+    # implemented: it validated and then did nothing at all.
+    db = _make_store_with_outline(tmp_path / "db.sqlite")
+    out = tmp_path / "out.svg"
+    cfg_path = tmp_path / "c.toml"
+    cfg_path.write_text(
+        '[glyph]\nstroke_numbers = true\n[canvas]\nmode = "single"\n', encoding="utf-8"
+    )
+
+    rc = cli.main(["draw", "沣", "-o", str(out), "--db", str(db), "--config", str(cfg_path)])
+
+    assert rc == 0
+    svg = out.read_text(encoding="utf-8")
+    assert svg.count("<text") == 7  # one per stroke of the 7-stroke fixture
+    for number in range(1, 8):
+        assert f">{number}</text>" in svg
+
+
+def test_stroke_numbers_off_emits_no_labels(tmp_path, capsys):
+    db = _make_store_with_outline(tmp_path / "db.sqlite")
+    out = tmp_path / "out.svg"
+    cfg_path = tmp_path / "c.toml"
+    cfg_path.write_text(
+        '[glyph]\nstroke_numbers = false\n[canvas]\nmode = "single"\n', encoding="utf-8"
+    )
+
+    rc = cli.main(["draw", "沣", "-o", str(out), "--db", str(db), "--config", str(cfg_path)])
+
+    assert rc == 0
+    assert "<text" not in out.read_text(encoding="utf-8")
+
+
+def test_stroke_numbers_are_not_drawn_in_sheet_mode(tmp_path, capsys):
+    # Spec §6 puts stroke-order numbers in `single` mode only: a sheet of
+    # practice cells numbered stroke-by-stroke would be unreadable.
+    db = _make_store_with_outline(tmp_path / "db.sqlite")
+    out = tmp_path / "out.svg"
+    cfg_path = tmp_path / "c.toml"
+    cfg_path.write_text(
+        '[glyph]\nstroke_numbers = true\n[canvas]\nmode = "sheet"\n', encoding="utf-8"
+    )
+
+    rc = cli.main(["draw", "沣", "-o", str(out), "--db", str(db), "--config", str(cfg_path)])
+
+    assert rc == 0
+    assert "<text" not in out.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("name", ["out.txt", "out", "out.jpeg"])
+def test_an_unrecognised_output_suffix_is_a_clean_validation_error(tmp_path, capsys, name):
+    # `draw -o out.txt` used to write SVG under a non-SVG suffix in silence.
+    db = _make_store(tmp_path / "db.sqlite")
+    out = tmp_path / name
+
+    rc = cli.main(["draw", "沣", "-o", str(out), "--db", str(db)])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert ".svg" in captured.err and ".png" in captured.err
+    assert "Traceback" not in captured.err
+    assert not out.exists()

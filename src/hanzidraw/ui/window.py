@@ -220,6 +220,7 @@ class MainWindow(QMainWindow):
                 scale=float(self._cfg.get("output.mouse.scale")),
                 step_delay_ms=float(self._cfg.get("output.mouse.step_delay_ms")),
                 clamp=clamp,
+                window_rect=self._frame_rect,
             )
             return self._mouse
         if which == "image":
@@ -230,6 +231,11 @@ class MainWindow(QMainWindow):
             # fall back instead of inventing per-commit file semantics.
             self.status("output.backend = image is for the draw command; drawing to the canvas")
         return CanvasBackend(self.canvas)
+
+    def _frame_rect(self) -> tuple[float, float, float, float]:
+        """Our own window's frame, read at draw time, for the mouse guard."""
+        geo = self.frameGeometry()
+        return (float(geo.left()), float(geo.top()), float(geo.right()), float(geo.bottom()))
 
     def commit_candidate(self, cand) -> None:
         backend = self._backend()
@@ -243,16 +249,21 @@ class MainWindow(QMainWindow):
                 if not self._store.has_char(codepoint):
                     self.status(f"no stroke data for {chr(codepoint)}")
                     continue
-                placed = self.canvas.sheet.add(load_glyph(self._store, codepoint), chr(codepoint))
+                glyph = load_glyph(self._store, codepoint)
+                text = chr(codepoint)
+                ox, oy, size = self.canvas.next_cell()
                 if isinstance(backend, CanvasBackend):
-                    backend.set_text(placed.text)
+                    backend.set_text(text)
                     if str(self._cfg.get("glyph.style")) == "outline":
                         backend.set_outline(self._store.outline(codepoint))
                 try:
-                    draw_glyph(backend, placed.glyph, placed.ox, placed.oy, placed.size)
+                    draw_glyph(backend, glyph, ox, oy, size)
                 except MouseAbort as exc:
                     self.status(str(exc))
                     break
+                # Only a completed draw advances the carriage: an aborted mouse
+                # draw used to leave a gap in the sheet where nothing was drawn.
+                self.canvas.advance(glyph, text)
         finally:
             if stop_listener is not None:
                 stop_listener()
