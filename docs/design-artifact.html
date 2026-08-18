@@ -1,0 +1,1021 @@
+<title>hanzidraw Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#f1f3f0;
+  --card:#f9faf7;
+  --sunk:#eaeee9;
+  --ink:#171d1b;
+  --ink-2:#3d4745;
+  --ink-3:#6a7570;
+  --rule:#d3dad3;
+  --rule-soft:#e3e8e2;
+  --accent:#2f7468;
+  --accent-2:#245c53;
+  --accent-soft:#dbeae4;
+  --seal:#a3402c;
+  --seal-soft:#f2e3dd;
+  --code-bg:#ecefea;
+  --shadow:0 1px 2px rgba(23,29,27,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0f1413;
+    --card:#161d1b;
+    --sunk:#131a18;
+    --ink:#e7ece9;
+    --ink-2:#b9c4bf;
+    --ink-3:#8a9791;
+    --rule:#2b3532;
+    --rule-soft:#212a27;
+    --accent:#6ec3b0;
+    --accent-2:#8ed4c3;
+    --accent-soft:#16302b;
+    --seal:#e08a70;
+    --seal-soft:#33201b;
+    --code-bg:#121a18;
+    --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0f1413;
+  --card:#161d1b;
+  --sunk:#131a18;
+  --ink:#e7ece9;
+  --ink-2:#b9c4bf;
+  --ink-3:#8a9791;
+  --rule:#2b3532;
+  --rule-soft:#212a27;
+  --accent:#6ec3b0;
+  --accent-2:#8ed4c3;
+  --accent-soft:#16302b;
+  --seal:#e08a70;
+  --seal-soft:#33201b;
+  --code-bg:#121a18;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  font-size:16.5px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.hz{font-family:"Noto Serif CJK SC","Source Han Serif SC","Noto Serif SC","Songti SC","PingFang SC","Microsoft YaHei",serif;font-weight:500}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 1.6rem 7rem}
+
+/* ---------- masthead ---------- */
+.masthead{padding:3.4rem 0 2rem;border-bottom:1px solid var(--rule)}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 1.3rem
+}
+.eyebrow b{color:var(--accent);font-weight:500}
+.titlerow{display:flex;gap:1.9rem;align-items:flex-start;flex-wrap:wrap}
+.square{
+  flex:0 0 auto;width:104px;height:104px;position:relative;
+  border:1px solid var(--seal);background:var(--card);
+  display:grid;place-items:center;
+}
+.square::before,.square::after{content:"";position:absolute;background:transparent}
+.square::before{left:0;right:0;top:50%;border-top:1px dashed var(--seal);opacity:.5}
+.square::after{top:0;bottom:0;left:50%;border-left:1px dashed var(--seal);opacity:.5}
+.square span{position:relative;font-size:68px;line-height:1;color:var(--ink)}
+h1{
+  font-family:Newsreader,Georgia,"Times New Roman",serif;
+  font-weight:500;font-size:clamp(2.9rem,7vw,4.3rem);
+  line-height:1;letter-spacing:-.015em;margin:.1rem 0 .5rem;
+  text-wrap:balance;
+}
+.deck{
+  font-family:Newsreader,Georgia,serif;font-size:1.34rem;line-height:1.42;
+  color:var(--ink-2);max-width:34ch;margin:0;font-style:italic;font-weight:400
+}
+.lede{max-width:66ch;margin:1.9rem 0 0;font-size:1.06rem;color:var(--ink-2)}
+.lede strong{color:var(--ink);font-weight:600}
+
+/* ---------- meta strip ---------- */
+.meta{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);
+  margin:2.4rem 0 0;max-width:none
+}
+.meta div{background:var(--card);padding:.8rem .95rem}
+.meta dt{
+  font-family:"IBM Plex Mono",monospace;font-size:.63rem;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-3);margin:0 0 .3rem
+}
+.meta dd{margin:0;font-size:.9rem;font-weight:500;line-height:1.35}
+
+/* ---------- contents ---------- */
+.toc{margin:2.6rem 0 0}
+.toc h2{
+  font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--ink-3);font-weight:400;margin:0 0 .9rem
+}
+.toc ol{
+  list-style:none;margin:0;padding:0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));
+  gap:.15rem 2rem;counter-reset:t
+}
+.toc li{counter-increment:t;border-bottom:1px solid var(--rule-soft)}
+.toc a{
+  display:flex;gap:.7rem;align-items:baseline;padding:.42rem 0;
+  color:var(--ink-2);text-decoration:none;font-size:.92rem
+}
+.toc a::before{
+  content:counter(t,decimal-leading-zero);
+  font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--accent);
+  font-variant-numeric:tabular-nums
+}
+.toc a:hover,.toc a:focus-visible{color:var(--accent)}
+
+/* ---------- sections ---------- */
+section{padding:3.4rem 0 0;position:relative}
+section+section{border-top:1px solid var(--rule-soft)}
+.sec{padding-left:4.6rem}
+.num{
+  position:absolute;left:0;top:3.55rem;
+  width:2.3rem;height:2.3rem;border:1px solid var(--rule);
+  display:grid;place-items:center;background:var(--card)
+}
+.num::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed var(--rule)}
+.num::after{content:"";position:absolute;top:0;bottom:0;left:50%;border-left:1px dashed var(--rule)}
+.num b{
+  position:relative;background:var(--card);padding:0 .18rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;font-weight:500;
+  color:var(--accent);font-variant-numeric:tabular-nums
+}
+h2.sh{
+  font-family:Newsreader,Georgia,serif;font-weight:500;
+  font-size:clamp(1.75rem,3.4vw,2.3rem);line-height:1.12;letter-spacing:-.01em;
+  margin:0 0 1.4rem;text-wrap:balance
+}
+h3{
+  font-family:"IBM Plex Sans",sans-serif;font-weight:600;font-size:1.02rem;
+  letter-spacing:.005em;margin:2.5rem 0 .8rem;max-width:66ch
+}
+h4{
+  font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:.7rem;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);
+  margin:2rem 0 .7rem
+}
+p,ul,ol,dl{max-width:66ch}
+p{margin:0 0 1.05rem}
+ul,ol{margin:0 0 1.15rem;padding-left:1.35rem}
+li{margin:0 0 .45rem}
+li::marker{color:var(--ink-3)}
+strong{font-weight:600}
+em{font-style:italic}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-soft)}
+a:hover,a:focus-visible{border-bottom-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+code,kbd,samp,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+code{
+  font-size:.855em;background:var(--code-bg);color:var(--ink);
+  padding:.08em .34em;border-radius:2px
+}
+kbd{
+  font-size:.78em;background:var(--card);color:var(--ink);
+  border:1px solid var(--rule);border-bottom-width:2px;border-radius:3px;
+  padding:.1em .38em;white-space:nowrap
+}
+
+/* pull-quote style aside */
+.note{
+  border-left:2px solid var(--accent);background:var(--accent-soft);
+  padding:.95rem 1.15rem;margin:1.6rem 0;max-width:66ch;
+  font-size:.95rem;color:var(--ink-2)
+}
+.note.seal{border-left-color:var(--seal);background:var(--seal-soft)}
+.note p:last-child{margin:0}
+.note b{color:var(--ink)}
+
+/* ---------- wide blocks ---------- */
+.wide{margin:1.7rem 0 1.9rem;max-width:none}
+.scroll{overflow-x:auto;border:1px solid var(--rule);background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:min(100%,560px);font-size:.9rem}
+caption{
+  caption-side:bottom;text-align:left;font-size:.78rem;color:var(--ink-3);
+  padding:.6rem .9rem;border-top:1px solid var(--rule-soft)
+}
+th,td{
+  text-align:left;vertical-align:top;padding:.6rem .9rem;
+  border-bottom:1px solid var(--rule-soft)
+}
+thead th{
+  font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:.66rem;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  background:var(--sunk);border-bottom:1px solid var(--rule);white-space:nowrap
+}
+tbody tr:last-child td{border-bottom:0}
+td.k,th.k{white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:.82rem}
+td code{background:transparent;padding:0;color:var(--accent-2)}
+.tnum{font-variant-numeric:tabular-nums}
+
+pre{
+  margin:0;padding:1.05rem 1.2rem;overflow-x:auto;
+  background:var(--sunk);border:1px solid var(--rule);
+  font-family:"IBM Plex Mono",monospace;font-size:.815rem;line-height:1.62;
+  color:var(--ink);tab-size:2
+}
+pre b{font-weight:500}
+.c{color:var(--ink-3);font-style:italic}
+.kw{color:var(--accent-2)}
+.tb{color:var(--seal);font-weight:500}
+.st{color:var(--accent)}
+.nu{color:var(--ink)}
+.di{color:var(--ink-3)}
+
+figure{margin:2rem 0 2.1rem;max-width:none}
+figure .scroll{padding:1.3rem 1.2rem;background:var(--card)}
+svg{display:block;max-width:100%;height:auto;color:var(--ink);margin:0 auto}
+figcaption{
+  font-size:.83rem;color:var(--ink-3);margin-top:.75rem;max-width:78ch;
+  line-height:1.5
+}
+figcaption b{color:var(--ink-2);font-weight:500}
+
+/* diagram primitives */
+.d-box{fill:var(--card);stroke:currentColor;stroke-width:1}
+.d-qt{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1}
+.d-opt{fill:var(--card);stroke:currentColor;stroke-width:1;stroke-dasharray:4 3;opacity:.85}
+.d-t{fill:var(--ink);font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500}
+.d-s{fill:var(--ink-3);font-family:"IBM Plex Sans",sans-serif;font-size:10.5px}
+.d-l{fill:var(--ink-3);font-family:"IBM Plex Sans",sans-serif;font-size:10.5px;font-style:italic}
+.d-line{stroke:currentColor;stroke-width:1.1;fill:none}
+.d-thin{stroke:var(--ink-3);stroke-width:1;fill:none;opacity:.75}
+.d-seal{stroke:var(--seal);stroke-width:1.3;fill:none}
+.d-sealt{fill:var(--seal);font-family:"IBM Plex Sans",sans-serif;font-size:10.5px;font-style:italic}
+.d-acc{fill:var(--accent);font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500}
+
+/* ---------- key list ---------- */
+.deflist{display:grid;gap:1.1rem;max-width:70ch;margin:1.4rem 0 1.2rem}
+.deflist>div{display:grid;grid-template-columns:minmax(0,1fr);gap:.25rem}
+.deflist dt,.dt{
+  font-family:"IBM Plex Mono",monospace;font-size:.85rem;font-weight:500;
+  color:var(--accent-2)
+}
+.deflist dd{margin:0;color:var(--ink-2);font-size:.96rem}
+
+footer{
+  margin-top:4rem;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--ink-3);max-width:66ch
+}
+footer .hz{font-size:1rem}
+
+@media (max-width:720px){
+  body{font-size:16px}
+  .sec{padding-left:0}
+  .num{position:relative;left:auto;top:auto;margin:0 0 1rem}
+  section{padding-top:2.6rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Design document &middot; 2026&#8209;08&#8209;18</p>
+  <div class="titlerow">
+    <div class="square" aria-hidden="true"><span class="hz">沣</span></div>
+    <div>
+      <h1>hanzidraw</h1>
+      <p class="deck">Type pinyin, pick a candidate, watch the character get written.</p>
+    </div>
+  </div>
+  <p class="lede">A desktop app for Windows and Linux that works like the Windows Chinese IME but <strong>draws</strong> the character instead of inserting text: the glyph appears stroke&#8209;by&#8209;stroke in canonical stroke order on a canvas, at a size and colour you control from a config file.</p>
+
+  <dl class="meta">
+    <div><dt>Status</dt><dd>Approved (design), pending implementation plan</dd></div>
+    <div><dt>Stack</dt><dd>Python + PySide6 &mdash; pure&#8209;Python core</dd></div>
+    <div><dt>Platforms</dt><dd>Windows, Linux</dd></div>
+    <div><dt>Coverage</dt><dd class="tnum">~9,500 characters + multi&#8209;syllable phrases</dd></div>
+    <div><dt>Supersedes</dt><dd class="tnum">276 characters baked into firmware flash</dd></div>
+    <div><dt>Also emits</dt><dd>A flash&#8209;budgeted <code>hanzi_data.c</code></dd></div>
+  </dl>
+
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#s1">Purpose</a></li>
+      <li><a href="#s2">Decisions made during design</a></li>
+      <li><a href="#s3">Architecture</a></li>
+      <li><a href="#s4">Data pipeline</a></li>
+      <li><a href="#s5">IME engine</a></li>
+      <li><a href="#s6">Rendering</a></li>
+      <li><a href="#s7">Configuration</a></li>
+      <li><a href="#s8">Output backends</a></li>
+      <li><a href="#s9">Firmware exporter</a></li>
+      <li><a href="#s10">Installation</a></li>
+      <li><a href="#s11">Testing strategy</a></li>
+      <li><a href="#s12">Risks and mitigations</a></li>
+    </ol>
+  </nav>
+</header>
+
+<section id="s1">
+  <div class="num" aria-hidden="true"><b>01</b></div>
+  <div class="sec">
+    <h2 class="sh">Purpose</h2>
+    <p>hanzidraw exists because of a hard ceiling in its companion project. The Keychron Q1 HE custom firmware in <code>KeychronQMK</code> (<code>users/xiangfeng</code>) bakes its pinyin IME and its stroke dictionary straight into flash. That caps it at <strong>276 characters &mdash; about 56&nbsp;KB of the ~87&nbsp;KB available</strong>, and every additional character is paid for in bytes the keyboard does not have.</p>
+    <p>The desktop app has no such ceiling. It covers every character that has stroke data (~9,500) plus multi&#8209;syllable words, and it additionally becomes the generator the firmware never had: a subcommand that selects a flash&#8209;budgeted subset and emits a compilable <code>hanzi_data.c</code>.</p>
+
+    <div class="note">
+      <p><b>One data pipeline, two consumers.</b> The desktop app and the keyboard firmware are fed from the same normalised stroke geometry, so the two never drift &mdash; and a golden test proves it (&sect;&thinsp;9).</p>
+    </div>
+
+    <h3>Success criteria</h3>
+    <ol>
+      <li>Type <code>feng</code>, get a Windows&#8209;like candidate bar, press <kbd>1</kbd>, and <span class="hz">沣</span> is drawn stroke&#8209;by&#8209;stroke on the canvas at the configured size and colour.</li>
+      <li>Type <code>beijing</code>, get <span class="hz">北京</span> as a <em>phrase</em> candidate, and both glyphs draw left&#8209;to&#8209;right on the carriage with correct wrapping.</li>
+      <li>Editing <code>config.toml</code> changes size / colour / grid / animation speed <em>without restarting the app</em>.</li>
+      <li><code>hanzidraw export-firmware --budget-kb 80 --must <span class="hz">沣潘叶祥</span></code> writes a compilable <code>hanzi_data.c</code> whose name&#8209;character arrays match the ones in the firmware today.</li>
+      <li>Installs and runs on both Windows and Linux from one codebase, with no global keyboard hook and no elevated permissions.</li>
+    </ol>
+
+    <h3>Non&#8209;goals</h3>
+    <ul>
+      <li><strong>Not a system input method.</strong> It does not register with Windows TSF or Linux IBus and never inserts text into other applications. (The <code>mouse</code> backend draws <em>into</em> another app, but by synthesizing pointer input, not text.)</li>
+      <li><strong>No global key capture for composition.</strong> Composing happens only when the app window has focus &mdash; deliberately, because that removes Wayland restrictions, accessibility permissions, and antivirus friction. One narrow, explicit exception: while the <code>mouse</code> backend is actively drawing into another application, a temporary listener is installed <em>solely</em> to catch the abort key, and is removed the moment the draw ends (&sect;&thinsp;8).</li>
+      <li><strong>No handwriting recognition</strong> &mdash; the inverse problem. Input is pinyin only.</li>
+      <li><strong>No traditional/simplified conversion</strong> beyond what the source data provides.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s2">
+  <div class="num" aria-hidden="true"><b>02</b></div>
+  <div class="sec">
+    <h2 class="sh">Decisions made during design</h2>
+    <p>Six questions were open when design started. Each is now closed, and the rest of this document is downstream of these answers.</p>
+    <div class="wide scroll">
+      <table>
+        <thead><tr><th>Question</th><th>Decision</th></tr></thead>
+        <tbody>
+          <tr><td class="k">What happens on commit</td><td>Pluggable output: <code>canvas</code> (own window), <code>mouse</code> (drives a focused paint app), <code>image</code> (PNG/SVG)</td></tr>
+          <tr><td class="k">How keystrokes are captured</td><td>App window focus only &mdash; no global hook</td></tr>
+          <tr><td class="k">Stack</td><td>Python + PySide6 (Qt), with a pure&#8209;Python testable core</td></tr>
+          <tr><td class="k">IME depth</td><td>Single characters <strong>and</strong> multi&#8209;syllable words/phrases</td></tr>
+          <tr><td class="k">Canvas model</td><td>Both <code>sheet</code> (persistent, wrapping carriage) and <code>single</code> (one glyph, replayable), switchable in config and at runtime</td></tr>
+          <tr><td class="k">Firmware exporter</td><td>In scope, as a CLI subcommand</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="s3">
+  <div class="num" aria-hidden="true"><b>03</b></div>
+  <div class="sec">
+    <h2 class="sh">Architecture</h2>
+    <p>Qt appears only in <code>ui/</code> and <code>output/canvas.py</code>. Everything else is plain Python and testable without a display server &mdash; which is exactly what makes CI on Linux and TDD practical.</p>
+
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 960 540" role="img" aria-label="Architecture and data flow: keystrokes go from the Qt UI into ime.session, which drives ime.candidates and the candidate sources over data.store; on commit, codepoints go to data.store for geometry, then render.glyph, render.animator and an output backend (canvas, mouse or image), with render.sheet advancing the carriage. Only ui/ and output.canvas import Qt.">
+          <defs>
+            <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+            </marker>
+          </defs>
+
+          <!-- tier 1: compose loop -->
+          <rect class="d-qt" x="24" y="40" width="186" height="66"></rect>
+          <text class="d-t" x="117" y="67" text-anchor="middle" fill="currentColor">ui/</text>
+          <text class="d-s" x="117" y="85" text-anchor="middle">Qt widgets &middot; keystrokes</text>
+
+          <rect class="d-box" x="290" y="40" width="200" height="66"></rect>
+          <text class="d-t" x="390" y="67" text-anchor="middle">ime.session</text>
+          <text class="d-s" x="390" y="85" text-anchor="middle">compose state machine</text>
+
+          <rect class="d-box" x="570" y="40" width="190" height="66"></rect>
+          <text class="d-t" x="665" y="67" text-anchor="middle">ime.candidates</text>
+          <text class="d-s" x="665" y="85" text-anchor="middle">segment &middot; rank &middot; page</text>
+
+          <line class="d-line" x1="210" y1="73" x2="282" y2="73" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="246" y="64" text-anchor="middle">keystroke</text>
+
+          <line class="d-line" x1="490" y1="62" x2="562" y2="62" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="526" y="53" text-anchor="middle">preedit</text>
+          <line class="d-line" x1="570" y1="88" x2="498" y2="88" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="530" y="103" text-anchor="middle">ranked page</text>
+
+          <polyline class="d-line" points="390,40 390,18 117,18 117,38" marker-end="url(#ar1)"></polyline>
+          <text class="d-l" x="253" y="13" text-anchor="middle">SessionState &rarr; preedit + candidate bar</text>
+
+          <!-- middle band: lookup -->
+          <rect class="d-box" x="200" y="166" width="240" height="62"></rect>
+          <text class="d-t" x="320" y="191" text-anchor="middle">data.store</text>
+          <text class="d-s" x="320" y="209" text-anchor="middle">the only module that knows SQL</text>
+
+          <rect class="d-box" x="570" y="166" width="190" height="62"></rect>
+          <text class="d-t" x="665" y="191" text-anchor="middle">ime.sources</text>
+          <text class="d-s" x="665" y="209" text-anchor="middle">CharSource &middot; PhraseSource</text>
+
+          <line class="d-line" x1="665" y1="106" x2="665" y2="164" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="673" y="139">syllables</text>
+
+          <line class="d-line" x1="570" y1="197" x2="448" y2="197" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="509" y="188" text-anchor="middle">prefix scans</text>
+
+          <line class="d-line" x1="340" y1="106" x2="340" y2="164" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="332" y="139" text-anchor="end">commit &rarr; [codepoint&hellip;]</text>
+
+          <!-- tier 2: draw pipeline -->
+          <rect class="d-box" x="180" y="300" width="170" height="62"></rect>
+          <text class="d-t" x="265" y="325" text-anchor="middle">render.glyph</text>
+          <text class="d-s" x="265" y="343" text-anchor="middle">paths in a target box</text>
+
+          <rect class="d-box" x="430" y="300" width="170" height="62"></rect>
+          <text class="d-t" x="515" y="325" text-anchor="middle">render.animator</text>
+          <text class="d-s" x="515" y="343" text-anchor="middle">timeline &middot; injected clock</text>
+
+          <rect class="d-box" x="680" y="300" width="200" height="62"></rect>
+          <text class="d-t" x="780" y="325" text-anchor="middle">output.Backend</text>
+          <text class="d-s" x="780" y="343" text-anchor="middle">begin &middot; stroke &middot; end &middot; advance</text>
+
+          <line class="d-line" x1="265" y1="228" x2="265" y2="298" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="273" y="267">medians &middot; outline</text>
+
+          <line class="d-line" x1="350" y1="331" x2="422" y2="331" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="386" y="322" text-anchor="middle">paths</text>
+
+          <line class="d-line" x1="600" y1="331" x2="672" y2="331" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="636" y="322" text-anchor="middle">frames</text>
+
+          <!-- backend bus -->
+          <polyline class="d-thin" points="765,362 765,394 180,394"></polyline>
+          <line class="d-line" x1="180" y1="394" x2="180" y2="418" marker-end="url(#ar1)"></line>
+          <line class="d-line" x1="380" y1="394" x2="380" y2="418" marker-end="url(#ar1)"></line>
+          <line class="d-line" x1="580" y1="394" x2="580" y2="418" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="470" y="386" text-anchor="middle">one of, from config</text>
+
+          <rect class="d-qt" x="100" y="420" width="160" height="56"></rect>
+          <text class="d-t" x="180" y="443" text-anchor="middle" fill="currentColor">output.canvas</text>
+          <text class="d-s" x="180" y="460" text-anchor="middle">QPainter</text>
+
+          <rect class="d-box" x="300" y="420" width="160" height="56"></rect>
+          <text class="d-t" x="380" y="443" text-anchor="middle">output.mouse</text>
+          <text class="d-s" x="380" y="460" text-anchor="middle">pynput pointer</text>
+
+          <rect class="d-box" x="500" y="420" width="160" height="56"></rect>
+          <text class="d-t" x="580" y="443" text-anchor="middle">output.image</text>
+          <text class="d-s" x="580" y="460" text-anchor="middle">PNG / SVG &middot; CI asserts</text>
+
+          <rect class="d-box" x="700" y="420" width="200" height="56"></rect>
+          <text class="d-t" x="800" y="443" text-anchor="middle">render.sheet</text>
+          <text class="d-s" x="800" y="460" text-anchor="middle">carriage &middot; wrap &middot; undo</text>
+
+          <line class="d-line" x1="835" y1="362" x2="835" y2="418" marker-end="url(#ar1)"></line>
+          <text class="d-l" x="843" y="394">advance()</text>
+
+          <!-- legend -->
+          <rect class="d-qt" x="100" y="505" width="15" height="15"></rect>
+          <text class="d-s" x="125" y="517">imports Qt &mdash; every other module runs and is unit tested with no display server</text>
+        </svg>
+      </div>
+      <figcaption><b>Figure 1 &mdash; module and data flow.</b> The compose loop (top) never touches geometry; the draw pipeline (bottom) never touches keys. <code>data.store</code> is the single seam to storage, and <code>ime.sources</code> is the seam tests inject fakes through. The two shaded boxes are the entire Qt surface of the program.</figcaption>
+    </figure>
+
+    <h4>Package layout</h4>
+    <div class="wide">
+      <pre><span class="tb">hanzidraw/</span>
+  __init__.py
+  config.py          <span class="c"># TOML load/merge/validate, defaults, hot reload signal</span>
+  cli.py             <span class="c"># entry points: run | fetch-data | draw | export-firmware</span>
+  <span class="tb">data/</span>
+    sources.py       <span class="c"># URLs, checksums, license/attribution metadata</span>
+    fetch.py         <span class="c"># resumable download with progress + integrity check</span>
+    build.py         <span class="c"># ETL: raw sources -&gt; SQLite</span>
+    store.py         <span class="c"># read API over the SQLite file (the only data consumer)</span>
+  <span class="tb">ime/</span>
+    syllables.py     <span class="c"># the legal-syllable table + pinyin normalisation</span>
+    segment.py       <span class="c"># pinyin string -&gt; syllable list (DP, ambiguity handling)</span>
+    sources.py       <span class="c"># CandidateSource protocol; CharSource, PhraseSource</span>
+    candidates.py    <span class="c"># merge + rank + paginate</span>
+    learn.py         <span class="c"># adaptive per-user weights (JSON)</span>
+    session.py       <span class="c"># the compose state machine (pure, no Qt, no I/O)</span>
+  <span class="tb">render/</span>
+    glyph.py         <span class="c"># stroke data -&gt; normalised paths in a target box</span>
+    animator.py      <span class="c"># time-based reveal timeline -&gt; partial geometry per frame</span>
+    sheet.py         <span class="c"># carriage, wrapping, guide grids, undo stack</span>
+    theme.py         <span class="c"># named presets -&gt; config overrides</span>
+  <span class="tb">output/</span>
+    base.py          <span class="c"># Backend protocol</span>
+    canvas.py        <span class="c"># QPainter into the sheet widget</span>
+    mouse.py         <span class="c"># pynput pointer synthesis (port of the firmware engine)</span>
+    image.py         <span class="c"># headless PNG/SVG writer</span>
+  <span class="tb">ui/</span>
+    app.py window.py candidatebar.py canvasview.py statusbar.py
+  <span class="tb">firmware/</span>
+    subset.py        <span class="c"># budget-aware character selection</span>
+    emit_c.py        <span class="c"># hanzi_data.c / .h emitter, byte-cost accounting</span>
+<span class="tb">tests/</span>               <span class="c"># pytest; core suites need no display</span></pre>
+    </div>
+
+    <h3>Module contracts</h3>
+    <dl class="deflist">
+      <div>
+        <dt><code>data.store</code></dt>
+        <dd>The only module that knows SQLite exists. Exposes <code>readings_with_prefix(p, limit)</code>, <code>phrases_with_key(key, limit)</code>, <code>medians(codepoint)</code>, <code>outline(codepoint)</code>, <code>char_meta(codepoint)</code>. Swapping the storage format touches this file only.</dd>
+      </div>
+      <div>
+        <dt><code>ime.session</code></dt>
+        <dd><code>feed(key) -&gt; SessionState</code>. Owns the preedit buffer, the candidate page, and the commit queue. No rendering, no file access; candidate lookup arrives through the <code>CandidateSource</code> protocol so tests inject fakes.</dd>
+      </div>
+      <div>
+        <dt><code>render.animator</code></dt>
+        <dd>Given a glyph and a wall&#8209;clock time, returns which strokes are complete and how far along the in&#8209;progress stroke is. Frame&#8209;rate independent and deterministic under an injected clock &mdash; so animation is unit tested, not eyeballed.</dd>
+      </div>
+      <div>
+        <dt><code>output.base.Backend</code></dt>
+        <dd><code>begin_glyph(box)</code>, <code>stroke(points)</code>, <code>end_glyph()</code>, <code>advance()</code>. Four methods keeps each backend small; the <code>image</code> backend is what lets CI assert on rendered output.</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<section id="s4">
+  <div class="num" aria-hidden="true"><b>04</b></div>
+  <div class="sec">
+    <h2 class="sh">Data pipeline</h2>
+    <p>Sources are fetched at first run rather than vendored: the repo stays small and redistribution/licensing stays clean. <code>hanzidraw fetch-data</code> downloads, verifies, and builds; the app refuses to start with a clear message if the database is missing or its schema version is stale.</p>
+
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 960 600" role="img" aria-label="Data pipeline: four upstream sources are downloaded and checksummed by data.fetch, transformed by data.build into a SQLite database with char, reading, phrase, geom and meta tables; characters without stroke data and phrases with a missing glyph are dropped and counted. The database feeds data.store and the app, and separately feeds firmware.subset and emit_c which produce hanzi_data.c, whose name-character arrays a golden test compares against the firmware today.">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+            </marker>
+            <marker id="arS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--seal)"></path>
+            </marker>
+          </defs>
+
+          <!-- sources -->
+          <rect class="d-box" x="24" y="28" width="240" height="56"></rect>
+          <text class="d-t" x="40" y="51">graphics.txt</text>
+          <text class="d-s" x="40" y="69">makemeahanzi &middot; medians + outlines</text>
+
+          <rect class="d-box" x="24" y="96" width="240" height="56"></rect>
+          <text class="d-t" x="40" y="119">hanziDB.csv</text>
+          <text class="d-s" x="40" y="137">freq rank &middot; pinyin &middot; stroke count</text>
+
+          <rect class="d-box" x="24" y="164" width="240" height="56"></rect>
+          <text class="d-t" x="40" y="187">CC-CEDICT</text>
+          <text class="d-s" x="40" y="205">words + numbered pinyin</text>
+
+          <rect class="d-opt" x="24" y="232" width="240" height="56"></rect>
+          <text class="d-t" x="40" y="255">essay.txt</text>
+          <text class="d-s" x="40" y="273">rime-essay &middot; word frequency</text>
+
+          <!-- fetch -->
+          <rect class="d-box" x="330" y="100" width="160" height="88"></rect>
+          <text class="d-t" x="410" y="134" text-anchor="middle">data.fetch</text>
+          <text class="d-s" x="410" y="152" text-anchor="middle">resumable</text>
+          <text class="d-s" x="410" y="168" text-anchor="middle">+ checksum</text>
+
+          <line class="d-line" x1="264" y1="56" x2="324" y2="132" marker-end="url(#ar2)"></line>
+          <line class="d-line" x1="264" y1="124" x2="324" y2="140" marker-end="url(#ar2)"></line>
+          <line class="d-line" x1="264" y1="192" x2="324" y2="152" marker-end="url(#ar2)"></line>
+          <line class="d-line" x1="264" y1="260" x2="324" y2="164" marker-end="url(#ar2)"></line>
+
+          <!-- build -->
+          <rect class="d-box" x="570" y="100" width="170" height="88"></rect>
+          <text class="d-t" x="655" y="134" text-anchor="middle">data.build</text>
+          <text class="d-s" x="655" y="152" text-anchor="middle">ETL &middot; normalise</text>
+          <text class="d-s" x="655" y="168" text-anchor="middle">the em box, once</text>
+          <line class="d-line" x1="490" y1="144" x2="564" y2="144" marker-end="url(#ar2)"></line>
+          <text class="d-l" x="527" y="136" text-anchor="middle">raw files</text>
+
+          <!-- db -->
+          <rect class="d-box" x="790" y="88" width="160" height="112"></rect>
+          <text class="d-t" x="806" y="112">hanzidraw.db</text>
+          <text class="d-s" x="806" y="132">char &middot; reading &middot; phrase</text>
+          <text class="d-s" x="806" y="148">geom (zlib per char)</text>
+          <text class="d-s" x="806" y="164">meta: schema_version,</text>
+          <text class="d-s" x="806" y="180">source hashes, date</text>
+          <line class="d-line" x1="740" y1="144" x2="784" y2="144" marker-end="url(#ar2)"></line>
+          <text class="d-l" x="762" y="136" text-anchor="middle">insert</text>
+
+          <!-- dropped -->
+          <rect class="d-opt" x="570" y="240" width="170" height="76"></rect>
+          <text class="d-t" x="586" y="263">dropped</text>
+          <text class="d-s" x="586" y="281">char with no medians</text>
+          <text class="d-s" x="586" y="297">phrase missing a glyph</text>
+          <line class="d-line" x1="655" y1="188" x2="655" y2="238" marker-end="url(#ar2)"></line>
+          <text class="d-l" x="645" y="233" text-anchor="end">counted in the build report</text>
+
+          <!-- app branch -->
+          <line class="d-line" x1="870" y1="200" x2="870" y2="296" marker-end="url(#ar2)"></line>
+          <text class="d-l" x="862" y="252" text-anchor="end">indexed prefix reads</text>
+          <rect class="d-box" x="790" y="298" width="160" height="56"></rect>
+          <text class="d-t" x="870" y="321" text-anchor="middle">data.store</text>
+          <text class="d-s" x="870" y="339" text-anchor="middle">no startup load</text>
+          <line class="d-line" x1="870" y1="354" x2="870" y2="418" marker-end="url(#ar2)"></line>
+          <text class="d-l" x="862" y="390" text-anchor="end">candidates + geometry</text>
+          <rect class="d-box" x="790" y="420" width="160" height="56"></rect>
+          <text class="d-t" x="870" y="443" text-anchor="middle">the app</text>
+          <text class="d-s" x="870" y="461" text-anchor="middle">ime + render</text>
+
+          <!-- firmware branch -->
+          <polyline class="d-line" points="810,200 810,215 310,215 310,308" marker-end="url(#ar2)"></polyline>
+          <text class="d-l" x="540" y="207" text-anchor="middle">geom + freq rank</text>
+
+          <rect class="d-box" x="200" y="310" width="180" height="56"></rect>
+          <text class="d-t" x="290" y="333" text-anchor="middle">firmware.subset</text>
+          <text class="d-s" x="290" y="351" text-anchor="middle">budget-aware pick</text>
+
+          <line class="d-line" x1="290" y1="366" x2="290" y2="418" marker-end="url(#ar2)"></line>
+          <text class="d-l" x="298" y="396">stops at the byte budget</text>
+
+          <rect class="d-box" x="200" y="420" width="180" height="56"></rect>
+          <text class="d-t" x="290" y="443" text-anchor="middle">firmware.emit_c</text>
+          <text class="d-s" x="290" y="461" text-anchor="middle">measured byte cost</text>
+
+          <line class="d-line" x1="290" y1="476" x2="290" y2="498" marker-end="url(#ar2)"></line>
+          <rect class="d-box" x="200" y="500" width="180" height="46"></rect>
+          <text class="d-t" x="290" y="528" text-anchor="middle">hanzi_data.c</text>
+
+          <line class="d-seal" x1="384" y1="523" x2="436" y2="523" marker-start="url(#arS)" marker-end="url(#arS)"></line>
+          <rect class="d-box" x="440" y="500" width="300" height="46" stroke="var(--seal)"></rect>
+          <text class="d-t" x="456" y="519" fill="var(--seal)">golden test</text>
+          <text class="d-s" x="456" y="535">regenerated arrays == the four name chars in flash</text>
+
+          <!-- legend -->
+          <rect class="d-opt" x="24" y="562" width="15" height="15"></rect>
+          <text class="d-s" x="46" y="574">optional source &mdash; the app must work fully without it</text>
+          <line class="d-seal" x1="470" y1="570" x2="510" y2="570"></line>
+          <text class="d-s" x="518" y="574">asserted byte-for-byte equality</text>
+        </svg>
+      </div>
+      <figcaption><b>Figure 2 &mdash; from upstream files to two consumers.</b> The em&#8209;box normalisation happens once, in <code>data.build</code>, so the app and the firmware exporter read the same geometry. Coverage gaps are removed at build time and <em>counted</em>, so they surface in a report instead of as a half&#8209;drawn word.</figcaption>
+    </figure>
+
+    <h4>Sources</h4>
+    <div class="wide scroll">
+      <table>
+        <thead><tr><th>Source</th><th>Provides</th><th>URL</th><th>License</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="k">Make Me a Hanzi<br><code>graphics.txt</code></td>
+            <td>Per&#8209;character stroke <strong>medians</strong> (the drawing) and SVG <strong>outlines</strong> (the typographic shape)</td>
+            <td class="k">raw.githubusercontent.com/<wbr>skishore/makemeahanzi/<wbr>master/graphics.txt</td>
+            <td>Arphic Public License / LGPL &mdash; attribution in <code>NOTICE</code></td>
+          </tr>
+          <tr>
+            <td class="k">hanziDB<br><code>data/hanziDB.csv</code></td>
+            <td>Frequency rank, pinyin, stroke count</td>
+            <td class="k">raw.githubusercontent.com/<wbr>ruddfawcett/hanziDB.csv/<wbr>master/data/hanziDB.csv</td>
+            <td>As used by the firmware</td>
+          </tr>
+          <tr>
+            <td class="k">CC-CEDICT</td>
+            <td>Words/phrases with numbered pinyin (<span class="hz">北京</span> <code>Bei3 jing1</code>)</td>
+            <td class="k">www.mdbg.net &mdash; CC&#8209;CEDICT release</td>
+            <td>CC BY&#8209;SA 4.0</td>
+          </tr>
+          <tr>
+            <td class="k">rime-essay<br><code>essay.txt</code> <em>(optional)</em></td>
+            <td>Word frequencies for phrase ranking</td>
+            <td class="k">github.com/rime/rime-essay</td>
+            <td>Attribution in <code>NOTICE</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>If the optional word&#8209;frequency source is unavailable, phrase ranking falls back to a heuristic over constituent character frequencies. <strong>The app must work fully without it.</strong></p>
+
+    <h3>Coordinate convention</h3>
+    <p>makemeahanzi coordinates live in a 1024&#8209;unit em box with Y pointing <em>up</em>. All geometry is normalised once, in <code>data.build</code>, to a 0&hairsp;..&hairsp;1 box with Y pointing <em>down</em> (screen convention), stored as 16&#8209;bit fixed point. Both the renderer and the firmware exporter then apply their own scale, so the em&#8209;box mapping exists in exactly one place.</p>
+
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 900 320" role="img" aria-label="Coordinate convention: makemeahanzi's 1024-unit em box with Y up is normalised once by data.build into a 0 to 1 box with Y down, and each consumer applies its own scale; the firmware grid is centred with S equal to 0.125.">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+            </marker>
+          </defs>
+
+          <text class="d-t" x="135" y="24" text-anchor="middle">source</text>
+          <text class="d-s" x="135" y="40" text-anchor="middle">1024 em box &middot; Y up</text>
+          <rect class="d-box" x="40" y="52" width="190" height="190"></rect>
+          <line class="d-thin" x1="40" y1="242" x2="234" y2="242" marker-end="url(#ar3)"></line>
+          <line class="d-thin" x1="40" y1="242" x2="40" y2="48" marker-end="url(#ar3)"></line>
+          <text class="d-s" x="48" y="258">0</text>
+          <text class="d-s" x="228" y="258" text-anchor="end">1024 &rarr; x</text>
+          <text class="d-s" x="48" y="66">1024 &uarr; y</text>
+          <circle cx="150" cy="120" r="3.5" fill="var(--accent)"></circle>
+          <text class="d-acc" x="160" y="117">mx, my</text>
+
+          <line class="d-line" x1="236" y1="147" x2="344" y2="147" marker-end="url(#ar3)"></line>
+          <text class="d-l" x="290" y="138" text-anchor="middle">data.build</text>
+          <text class="d-l" x="290" y="164" text-anchor="middle">flip + rescale</text>
+
+          <text class="d-t" x="445" y="24" text-anchor="middle">stored</text>
+          <text class="d-s" x="445" y="40" text-anchor="middle">0..1 box &middot; Y down &middot; fixed point</text>
+          <rect class="d-box" x="350" y="52" width="190" height="190"></rect>
+          <line class="d-thin" x1="350" y1="52" x2="544" y2="52" marker-end="url(#ar3)"></line>
+          <line class="d-thin" x1="350" y1="52" x2="350" y2="246" marker-end="url(#ar3)"></line>
+          <text class="d-s" x="358" y="70">0</text>
+          <text class="d-s" x="534" y="70" text-anchor="end">1 &rarr; x</text>
+          <text class="d-s" x="358" y="236">1 &darr; y</text>
+          <circle cx="410" cy="180" r="3.5" fill="var(--accent)"></circle>
+          <text class="d-acc" x="420" y="177">nx, ny</text>
+
+          <line class="d-line" x1="546" y1="147" x2="654" y2="147" marker-end="url(#ar3)"></line>
+          <text class="d-l" x="600" y="138" text-anchor="middle">per consumer</text>
+          <text class="d-l" x="600" y="164" text-anchor="middle">own scale</text>
+
+          <text class="d-t" x="755" y="24" text-anchor="middle">firmware grid</text>
+          <text class="d-s" x="755" y="40" text-anchor="middle">centred &middot; S = 0.125</text>
+          <rect class="d-box" x="660" y="52" width="190" height="190"></rect>
+          <line class="d-thin" x1="660" y1="147" x2="850" y2="147" stroke-dasharray="4 3"></line>
+          <line class="d-thin" x1="755" y1="52" x2="755" y2="242" stroke-dasharray="4 3"></line>
+          <text class="d-s" x="762" y="162">0,0</text>
+          <circle cx="800" cy="110" r="3.5" fill="var(--accent)"></circle>
+          <text class="d-acc" x="810" y="107">x, y</text>
+
+          <text class="d-t" x="40" y="286">x = round(S &middot; (mx &minus; 512))&#8195;y = round(S &middot; (388 &minus; my))&#8195;S = 0.125</text>
+          <text class="d-s" x="40" y="306">Raw medians used as-is &mdash; no resampling. A golden test pins this transform.</text>
+        </svg>
+      </div>
+      <figcaption><b>Figure 3 &mdash; one em&#8209;box mapping, two scales.</b> The firmware's transform is reproduced from the same normalised data, which is why the exporter can be trusted to reproduce arrays that were originally generated by a different program.</figcaption>
+    </figure>
+
+    <h3>Schema</h3>
+    <p>SQLite, with <code>schema_version</code> in a <code>meta</code> table.</p>
+    <div class="wide">
+      <pre><span class="kw">char</span>(codepoint <span class="tb">INTEGER PRIMARY KEY</span>, freq_rank <span class="tb">INTEGER</span>, nstroke <span class="tb">INTEGER</span>)
+<span class="kw">reading</span>(pinyin <span class="tb">TEXT</span>, codepoint <span class="tb">INTEGER</span>)          <span class="c">-- INDEX on pinyin (prefix scans)</span>
+<span class="kw">phrase</span>(pinyin_key <span class="tb">TEXT</span>, text <span class="tb">TEXT</span>, weight <span class="tb">REAL</span>)  <span class="c">-- INDEX on pinyin_key</span>
+<span class="kw">geom</span>(codepoint <span class="tb">INTEGER PRIMARY KEY</span>, medians <span class="tb">BLOB</span>, outline <span class="tb">BLOB</span>)  <span class="c">-- zlib per char</span>
+<span class="kw">meta</span>(key <span class="tb">TEXT PRIMARY KEY</span>, value <span class="tb">TEXT</span>)           <span class="c">-- schema_version, source hashes, build date</span></pre>
+    </div>
+    <p>A character is inserted only if <code>graphics.txt</code> has stroke data for it &mdash; <strong>the app never offers a candidate it cannot draw</strong>. A phrase is inserted only if <em>every</em> constituent character has geometry; phrases failing that are dropped at build time and counted in the build report, so coverage gaps are visible rather than surfacing as a half&#8209;drawn word.</p>
+    <p>Indexed prefix queries mean no startup load and a small resident footprint. <code>--medians-only</code> at build time omits <code>geom.outline</code> (a much smaller database, and <code>glyph.style = "outline"</code> is then rejected with a clear error). Actual sizes get recorded in the README from a real build &mdash; no estimates in shipped docs.</p>
+
+    <h4>Pinyin normalisation &mdash; one function, used everywhere</h4>
+    <p>Toneless; <code>ü</code> and <code>u:</code> become <code>v</code>; CC&#8209;CEDICT tone digits stripped; case folded. Characters with several readings keep every reading, one <code>reading</code> row each.</p>
+  </div>
+</section>
+
+<section id="s5">
+  <div class="num" aria-hidden="true"><b>05</b></div>
+  <div class="sec">
+    <h2 class="sh">IME engine</h2>
+
+    <h3>Segmentation</h3>
+    <div class="wide">
+      <pre><span class="st">beijingdaxue</span>  &rarr;  DP over the legal-syllable table  &rarr;  <span class="kw">bei</span> <span class="di">'</span> <span class="kw">jing</span> <span class="di">'</span> <span class="kw">da</span> <span class="di">'</span> <span class="kw">xue</span></pre>
+    </div>
+    <p>The segmentation is shown split in the preedit. An explicit apostrophe key <em>forces</em> a boundary, which is the standard resolution for genuine ambiguities (<code>xian</code> vs <code>xi'an</code>, <code>nanan</code> vs <code>nan'an</code>). Where no apostrophe is given, the segmenter prefers the fewest syllables, then longest&#8209;first.</p>
+    <p>When an input has more than one valid segmentation, candidates are drawn from the <strong>top two</strong> segmentations and merged &mdash; the preferred one first &mdash; rather than silently discarding the alternative.</p>
+
+    <h3>Candidate ranking</h3>
+    <p>In order:</p>
+    <ol>
+      <li>Exact&#8209;key phrases</li>
+      <li>Longest&#8209;prefix phrases</li>
+      <li>Single characters by frequency rank</li>
+    </ol>
+    <p>&hellip;then deduplicated. <code>ime.learn</code> promotes what you have actually picked (a small JSON of counts and recency in the user data dir), which is what makes it feel like a real IME rather than a lookup table. It is config&#8209;gated by <code>ime.learn</code> and resettable.</p>
+
+    <h3>Key bindings &mdash; Windows&#8209;IME&#8209;like</h3>
+    <div class="wide scroll">
+      <table>
+        <caption>Composition keys require app focus. <kbd>Ctrl</kbd>+<kbd>.</kbd> is the only binding that also works while another application has focus, and only for the duration of a <code>mouse</code> draw.</caption>
+        <thead><tr><th>Key</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td class="k"><kbd>a</kbd>&hairsp;&ndash;&hairsp;<kbd>z</kbd></td><td>Append to the preedit, refresh candidates</td></tr>
+          <tr><td class="k"><kbd>'</kbd></td><td>Force a syllable boundary</td></tr>
+          <tr><td class="k"><kbd>1</kbd>&hairsp;&ndash;&hairsp;<kbd>9</kbd></td><td>Commit the <em>n</em>th candidate on the current page</td></tr>
+          <tr><td class="k"><kbd>Space</kbd> / <kbd>Enter</kbd></td><td>Commit the highlighted candidate</td></tr>
+          <tr><td class="k"><kbd>&larr;</kbd> / <kbd>&rarr;</kbd> / <kbd>Tab</kbd></td><td>Move the highlight</td></tr>
+          <tr><td class="k"><kbd>-</kbd> <kbd>=</kbd> / <kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>Previous / next candidate page</td></tr>
+          <tr><td class="k"><kbd>Backspace</kbd></td><td>Delete the last preedit letter</td></tr>
+          <tr><td class="k"><kbd>Esc</kbd></td><td>Cancel the composition</td></tr>
+          <tr><td class="k"><kbd>F2</kbd></td><td>Toggle <code>sheet</code> / <code>single</code> canvas mode</td></tr>
+          <tr><td class="k"><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Undo the last glyph / clear the sheet</td></tr>
+          <tr><td class="k"><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Export the sheet</td></tr>
+          <tr><td class="k"><kbd>Ctrl</kbd>+<kbd>.</kbd></td><td>Abort an in&#8209;progress mouse draw (the <code>MS_STOP</code> equivalent)</td></tr>
+          <tr><td class="k"><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Replay the current glyph (<code>single</code> mode)</td></tr>
+          <tr><td class="k"><kbd>Ctrl</kbd>+<kbd>]</kbd> / <kbd>Ctrl</kbd>+<kbd>[</kbd></td><td>Step one stroke forward / back (<code>single</code> mode)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Committing a phrase draws its glyphs consecutively on the carriage.</p>
+  </div>
+</section>
+
+<section id="s6">
+  <div class="num" aria-hidden="true"><b>06</b></div>
+  <div class="sec">
+    <h2 class="sh">Rendering</h2>
+    <p>Two styles come out of the same data.</p>
+    <dl class="deflist">
+      <div>
+        <dt><code>brush</code></dt>
+        <dd>Medians drawn as round&#8209;capped polylines. Matches the firmware's look, and is the <em>only</em> style the <code>mouse</code> backend can produce &mdash; a pointer can only trace a path.</dd>
+      </div>
+      <div>
+        <dt><code>outline</code></dt>
+        <dd>The real typographic shape: the SVG outline is used as a clip and revealed by a thick pen travelling along the median, so a stroke grows with its true contour.</dd>
+      </div>
+    </dl>
+
+    <h3>Animation</h3>
+    <p>Animation is <strong>time&#8209;based</strong> &mdash; per&#8209;stroke duration, inter&#8209;stroke gap, easing &mdash; and therefore frame&#8209;rate independent. <code>render.animator</code> is asked &ldquo;given this glyph and this wall&#8209;clock time, which strokes are done and how far along is the current one?&rdquo;, which is why it can be unit tested under an injected clock instead of eyeballed.</p>
+
+    <h3>Canvas modes</h3>
+    <ul>
+      <li><code>single</code> adds replay, step&#8209;by&#8209;stroke, and optional stroke&#8209;order numbers.</li>
+      <li><code>sheet</code> keeps confirmed glyphs, advances the carriage, wraps lines, and can draw a <span class="hz">田</span> or <span class="hz">米</span> guide grid.</li>
+    </ul>
+    <p><code>canvas.columns</code> sets where a line wraps and <code>canvas.advance</code> sets the spacing, so the sheet is <code>columns &times; advance &times; glyph.size_px</code> wide. The view <em>scrolls</em> when the window is narrower than that, and never reflows on resize &mdash; so a written sheet keeps its layout.</p>
+  </div>
+</section>
+
+<section id="s7">
+  <div class="num" aria-hidden="true"><b>07</b></div>
+  <div class="sec">
+    <h2 class="sh">Configuration</h2>
+    <p>TOML at <code>~/.config/hanzidraw/config.toml</code> (Linux) or <code>%APPDATA%\hanzidraw\config.toml</code> (Windows), <strong>hot&#8209;reloaded on save</strong> via a file watcher, with validation errors surfaced in the app's status bar instead of crashing. Unknown keys are a warning, not a failure. <code>--config PATH</code> overrides the location.</p>
+    <div class="note">
+      <p><b>This block is the answer to &ldquo;how do I change the size and the colour?&rdquo;</b> &mdash; every knob the app has, in one file, with no restart.</p>
+    </div>
+
+    <div class="wide">
+      <pre><span class="tb">[glyph]</span>
+style = <span class="st">"brush"</span>               <span class="c"># brush | outline</span>
+size_px = <span class="st">240</span>
+stroke_width_px = <span class="st">14</span>
+color = <span class="st">"#111111"</span>             <span class="c"># or ["#c0392b", "#f39c12"] for a gradient</span>
+outline_color = <span class="st">"#cccccc"</span>
+show_pending_outline = <span class="st">true</span>   <span class="c"># ghost of the full character while drawing</span>
+stroke_numbers = <span class="st">false</span>
+
+<span class="tb">[glyph.animation]</span>
+enabled = <span class="st">true</span>
+stroke_ms = <span class="st">380</span>
+gap_ms = <span class="st">90</span>
+easing = <span class="st">"ease_out"</span>           <span class="c"># linear | ease_in | ease_out | ease_in_out</span>
+
+<span class="tb">[canvas]</span>
+mode = <span class="st">"sheet"</span>                <span class="c"># sheet | single   (F2 toggles)</span>
+background = <span class="st">"#fdfdf7"</span>
+grid = <span class="st">"tian"</span>                 <span class="c"># none | tian | mi | cross</span>
+grid_color = <span class="st">"#e5ded0"</span>
+columns = <span class="st">6</span>
+advance = <span class="st">1.15</span>                <span class="c"># multiple of size_px</span>
+wrap = <span class="st">true</span>
+always_on_top = <span class="st">false</span>
+
+<span class="tb">[ime]</span>
+page_size = <span class="st">9</span>
+phrases = <span class="st">true</span>
+learn = <span class="st">true</span>
+max_candidates = <span class="st">200</span>
+
+<span class="tb">[output]</span>
+backend = <span class="st">"canvas"</span>            <span class="c"># canvas | mouse | image</span>
+
+<span class="tb">[output.mouse]</span>
+scale = <span class="st">1.0</span>
+step_delay_ms = <span class="st">4</span>
+button = <span class="st">"left"</span>
+clamp_to_screen = <span class="st">true</span>
+
+<span class="tb">[output.image]</span>
+dir = <span class="st">"~/Pictures/hanzidraw"</span>
+format = <span class="st">"png"</span>                <span class="c"># png | svg</span>
+
+<span class="tb">[theme]</span>
+preset = <span class="st">"ink"</span>                 <span class="c"># ink | neon | chalk | none (none = use values above)</span></pre>
+    </div>
+    <p><code>theme.preset</code> supplies <em>defaults</em> that explicit keys above override, so a preset never silently discards a setting you wrote.</p>
+  </div>
+</section>
+
+<section id="s8">
+  <div class="num" aria-hidden="true"><b>08</b></div>
+  <div class="sec">
+    <h2 class="sh">Output backends</h2>
+    <dl class="deflist">
+      <div>
+        <dt><code>canvas</code></dt>
+        <dd>QPainter into the sheet widget. Always available.</dd>
+      </div>
+      <div>
+        <dt><code>mouse</code></dt>
+        <dd><code>pynput</code> pointer synthesis: absolute moves with the button held for the duration of a stroke and released between strokes, mirroring the firmware's draw engine. Screen&#8209;bounds clamping, a configurable step delay for applications that drop fast input, and an abort path that works <em>even though our window is unfocused during the draw</em> &mdash; because a runaway synthetic pointer is hostile. It refuses to start when the focused window is our own.</dd>
+      </div>
+      <div>
+        <dt><code>image</code></dt>
+        <dd>Headless renderer behind <code>hanzidraw draw <span class="hz">沣潘叶祥</span> -o name.svg</code>. This is also the backend CI uses to assert on rendered geometry.</dd>
+      </div>
+    </dl>
+
+    <h3>The mouse backend's abort path is threefold</h3>
+    <div class="wide scroll">
+      <table>
+        <thead><tr><th>Guard</th><th>Trips on</th><th>Lifetime</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Temporary <code>pynput</code> key listener</td><td><kbd>Ctrl</kbd>+<kbd>.</kbd> while another app has focus</td><td>Installed when the draw starts, removed the moment it ends</td></tr>
+          <tr><td class="k">Physical&#8209;movement detection</td><td>You move the real mouse</td><td>For the duration of the draw</td></tr>
+          <tr><td class="k">Hard per&#8209;glyph time limit</td><td>Wall clock, unconditionally</td><td>Stops the draw and releases the button</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note seal">
+      <p><b>This is the one place the no&#8209;global&#8209;hook rule bends</b>, and it bends only for the abort key, only while a synthetic pointer is moving, and it is off by default (<code>output.backend = "canvas"</code>).</p>
+    </div>
+  </div>
+</section>
+
+<section id="s9">
+  <div class="num" aria-hidden="true"><b>09</b></div>
+  <div class="sec">
+    <h2 class="sh">Firmware exporter</h2>
+    <div class="wide">
+      <pre>hanzidraw export-firmware --budget-kb <span class="st">80</span> --must <span class="st hz">沣潘叶祥</span> --per-initial <span class="st">12</span> \
+    -o ~/KeychronQMK/users/xiangfeng/src/ime/hanzi_data.c</pre>
+    </div>
+    <p><strong>Selection:</strong> must&#8209;have characters first (so <span class="hz">沣</span>/<span class="hz">潘</span>/<span class="hz">叶</span>/<span class="hz">祥</span> remain candidate&nbsp;1 for their syllable), then by hanziDB frequency rank, optionally capped per pinyin initial, stopping at the byte budget.</p>
+    <p><strong>Emission</strong> matches the firmware's existing format exactly &mdash; <code>x[]</code>, <code>y[]</code>, <code>len[]</code>, <code>hanzi_table[]</code>, <code>hanzi_count</code> &mdash; with per&#8209;character byte cost <em>measured from the emitted arrays</em> rather than assumed, and a summary printed: characters selected, total KB, headroom.</p>
+    <div class="note seal">
+      <p><b>Golden test.</b> Regenerating with the current parameters must reproduce the existing arrays for the four name characters byte&#8209;for&#8209;byte. That test is the proof the em&#8209;box transform was ported correctly, and it fails loudly if either side drifts.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s10">
+  <div class="num" aria-hidden="true"><b>10</b></div>
+  <div class="sec">
+    <h2 class="sh">Installation</h2>
+    <p>One codebase, both platforms. <code>uv tool install hanzidraw</code> or <code>pipx install .</code>; <code>hanzidraw</code> launches the app, <code>hanzidraw fetch-data</code> builds the database with a progress bar and resumable downloads. An optional PyInstaller spec produces a Windows <code>.exe</code> for a Python&#8209;free install. PySide6 is LGPL, which suits both distribution paths.</p>
+  </div>
+</section>
+
+<section id="s11">
+  <div class="num" aria-hidden="true"><b>11</b></div>
+  <div class="sec">
+    <h2 class="sh">Testing strategy</h2>
+    <p>TDD throughout; the display&#8209;free core is the majority of the code.</p>
+    <div class="wide scroll">
+      <table>
+        <caption>Network is never touched in tests; <code>data.fetch</code> is tested against local fixtures.</caption>
+        <thead><tr><th>Area</th><th>Tests</th></tr></thead>
+        <tbody>
+          <tr><td class="k">ime.segment</td><td>Legal/illegal syllables, apostrophe forcing, <code>xian</code>/<code>xi'an</code>, <code>nanan</code>/<code>nan'an</code>, <code>n</code>/<code>ng</code> boundaries, empty and garbage input</td></tr>
+          <tr><td class="k">ime.candidates</td><td>Ordering across sources, dedup, pagination, learn&#8209;weight promotion, <code>phrases = false</code></td></tr>
+          <tr><td class="k">ime.session</td><td>Full key&#8209;sequence scripts asserting preedit / page / commit output</td></tr>
+          <tr><td class="k">data.build&#8202;/&#8202;store</td><td>Round&#8209;trip of medians and outlines, schema version guard, <code>--medians-only</code> behaviour, pinyin normalisation</td></tr>
+          <tr><td class="k">render.glyph&#8202;/&#8202;animator</td><td>Normalisation into a target box, deterministic timeline under an injected clock, easing endpoints</td></tr>
+          <tr><td class="k">output.image</td><td>Golden SVG for a known character</td></tr>
+          <tr><td class="k">firmware.emit_c</td><td>Golden comparison against today's <code>hanzi_data.c</code> name characters; budget accounting</td></tr>
+          <tr><td class="k">ui</td><td>Thin smoke test with <code>pytest-qt</code>, skipped when no display</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="s12">
+  <div class="num" aria-hidden="true"><b>12</b></div>
+  <div class="sec">
+    <h2 class="sh">Risks and mitigations</h2>
+    <div class="wide scroll">
+      <table>
+        <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td>Pinyin ambiguity (<code>xi'an</code>) segmented wrongly</td><td>Apostrophe key, both branches offered as candidates, dedicated test suite</td></tr>
+          <tr><td>Phrase ranking is mediocre without a word&#8209;frequency source</td><td>Character&#8209;frequency fallback plus <code>ime.learn</code>; the optional source <em>improves</em> it rather than gating it</td></tr>
+          <tr><td>Outline blobs dominate database size</td><td><code>--medians-only</code> build flag; <code>outline</code> style then errors clearly</td></tr>
+          <tr><td>Synthetic pointer input misbehaving in the <code>mouse</code> backend</td><td>Bounds clamping, abort hotkey, configurable pacing, off by default</td></tr>
+          <tr><td>Source data or URLs changing upstream</td><td>Checksums recorded in <code>meta</code>; <code>fetch-data</code> reports a mismatch instead of building a corrupt database</td></tr>
+          <tr><td>Scope creep toward a real system IME</td><td>Explicit non&#8209;goal; the <code>CandidateSource</code> seam is where any future work goes</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>hanzidraw design &mdash; 2026&#8209;08&#8209;18 &middot; status: approved (design), pending implementation plan. Stroke data from Make Me a Hanzi; frequency and pinyin from hanziDB; words from CC&#8209;CEDICT. Attribution lives in <code>NOTICE</code>.</p>
+  <p><span class="hz">沣潘叶祥</span></p>
+</footer>
+
+</div>
