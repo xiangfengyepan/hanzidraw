@@ -66,9 +66,26 @@ def _cmd_draw(args: argparse.Namespace) -> int:
     from .output.image import SvgBackend, save_png
 
     cfg = load_config(Path(args.config) if args.config else None)
-    size = float(args.size or cfg.get("glyph.size_px"))
+    size = float(args.size if args.size is not None else cfg.get("glyph.size_px"))
+    columns = int(args.columns if args.columns is not None else cfg.get("canvas.columns"))
+    color = str(args.color if args.color is not None else cfg.get("glyph.color"))
+
+    if size <= 0:
+        print(f"--size must be greater than 0, got {size!r}", file=sys.stderr)
+        return 1
+    if columns < 1:
+        print(f"--columns must be at least 1, got {columns!r}", file=sys.stderr)
+        return 1
+    if not color:
+        print(f"--color must not be empty, got {color!r}", file=sys.stderr)
+        return 1
+
+    chars = [ch for ch in args.text if not ch.isspace()]
+    if not chars:
+        print("nothing to draw: no characters given", file=sys.stderr)
+        return 1
+
     advance = size * float(cfg.get("canvas.advance"))
-    columns = int(args.columns or cfg.get("canvas.columns"))
 
     try:
         store = Store.open(Path(args.db) if args.db else db_path())
@@ -76,7 +93,6 @@ def _cmd_draw(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
-    chars = [ch for ch in args.text if not ch.isspace()]
     missing = [ch for ch in chars if not store.has_char(ord(ch))]
     if missing:
         print(f"no stroke data for: {' '.join(missing)}", file=sys.stderr)
@@ -90,7 +106,7 @@ def _cmd_draw(args: argparse.Namespace) -> int:
         height=height,
         background=str(cfg.get("canvas.background")),
         style=Style(
-            color=str(args.color or cfg.get("glyph.color")),
+            color=color,
             width=float(cfg.get("glyph.stroke_width_px")),
         ),
     )
@@ -101,10 +117,14 @@ def _cmd_draw(args: argparse.Namespace) -> int:
         draw_glyph(backend, load_glyph(store, ord(ch)), ox, oy, size)
 
     out = Path(args.output)
-    if out.suffix.lower() == ".png":
-        save_png(backend, out)
-    else:
-        backend.save(out)
+    try:
+        if out.suffix.lower() == ".png":
+            save_png(backend, out)
+        else:
+            backend.save(out)
+    except (OSError, RuntimeError) as exc:
+        print(f"could not write {out}: {exc}", file=sys.stderr)
+        return 1
     print(f"wrote {out}")
     return 0
 
