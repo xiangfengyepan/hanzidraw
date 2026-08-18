@@ -11,13 +11,10 @@ from .sources import Candidate, CandidateSource
 _SOURCE_PRIORITY = {"phrase": 0, "char": 1}
 
 
-def collect(
-    sources: Iterable[CandidateSource], segs: Sequence[Segmentation], limit: int
-) -> list[Candidate]:
+def collect(sources: Iterable[CandidateSource], seg: Segmentation, limit: int) -> list[Candidate]:
     out: list[Candidate] = []
-    for seg in segs:
-        for source in sources:
-            out.extend(source.lookup(seg, limit))
+    for source in sources:
+        out.extend(source.lookup(seg, limit))
     return out
 
 

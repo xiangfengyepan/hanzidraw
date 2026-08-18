@@ -1,10 +1,11 @@
 import tempfile
 from pathlib import Path
 
+from hanzidraw.data.store import Store
 from hanzidraw.ime.candidates import collect, paginate, rank
 from hanzidraw.ime.learn import Learn
 from hanzidraw.ime.segment import segment
-from hanzidraw.ime.sources import Candidate
+from hanzidraw.ime.sources import Candidate, CharSource, PhraseSource
 
 
 def _c(text, source, weight, consumed=1):
@@ -21,11 +22,12 @@ class FakeSource:
         return self.cands[:limit]
 
 
-def test_collect_queries_every_source_with_every_segmentation():
+def test_collect_queries_single_segmentation_once_per_source():
     a, b = FakeSource(_c("北", "char", 5)), FakeSource(_c("北京", "phrase", 9, 2))
-    segs = segment("xian")  # two alternatives
-    out = collect([a, b], segs, limit=10)
-    assert len(a.calls) == len(segs)
+    seg = segment("xian")[0]  # single segmentation
+    out = collect([a, b], seg, limit=10)
+    assert len(a.calls) == 1  # each source called exactly once
+    assert len(b.calls) == 1
     assert {c.text for c in out} == {"北", "北京"}
 
 
@@ -145,6 +147,81 @@ def test_rank_zero_syllables_typed():
     )
     # "北" tier 0 (full match for incomplete), "北京" tier 1 (prediction)
     assert [c.text for c in out] == ["北", "北京"]
+
+
+def test_collect_no_cross_syllable_characters(tmp_path):
+    """collect() with 'xian' seg doesn't include 'xi'-only characters.
+
+    When typing 'xian' (one syllable), CharSource should return only
+    characters keyed 'xian', not 'xi'. The phrase 西安 (keyed 'xian')
+    is still returned as a prediction.
+    """
+    store = Store.create(tmp_path / "test.db")
+    MEDIANS = (((0, 0), (10, 10)),)
+
+    # Add xi character
+    store.add_char(ord("西"), freq_rank=100, nstroke=1, medians=MEDIANS, outline=None)
+    store.add_reading("xi", ord("西"))
+
+    # Add xian character
+    store.add_char(ord("现"), freq_rank=50, nstroke=1, medians=MEDIANS, outline=None)
+    store.add_reading("xian", ord("现"))
+
+    # Add phrase keyed 'xian'
+    store.add_phrase("xian", "西安", 1000.0)
+
+    store.finish()
+
+    char_source = CharSource(store)
+    phrase_source = PhraseSource(store)
+    seg = segment("xian")[0]  # first segmentation
+
+    out = collect([char_source, phrase_source], seg, limit=10)
+
+    texts = {c.text for c in out}
+    # Should include 现 (xian character) and 西安 (xian phrase)
+    # Should NOT include 西 (xi-only character)
+    assert "现" in texts
+    assert "西安" in texts
+    assert "西" not in texts
+
+
+def test_collect_apostrophe_segmentation_includes_first_syllable(tmp_path):
+    """Segmentation with xi+an includes characters for the first syllable 'xi'.
+
+    This proves the disambiguator works: typing xi'an (showing as
+    segmentations with xi as first syllable) returns xi characters.
+    """
+    store = Store.create(tmp_path / "test.db")
+    MEDIANS = (((0, 0), (10, 10)),)
+
+    # Add xi character
+    store.add_char(ord("西"), freq_rank=100, nstroke=1, medians=MEDIANS, outline=None)
+    store.add_reading("xi", ord("西"))
+
+    # Add xian character
+    store.add_char(ord("现"), freq_rank=50, nstroke=1, medians=MEDIANS, outline=None)
+    store.add_reading("xian", ord("现"))
+
+    store.finish()
+
+    char_source = CharSource(store)
+    segs = segment("xian")
+
+    # Find the segmentation with xi as first syllable
+    xi_an_seg = None
+    for s in segs:
+        if len(s.syllables) > 1 and s.syllables[0] == "xi":
+            xi_an_seg = s
+            break
+
+    assert xi_an_seg is not None, "No xi'an segmentation found"
+
+    out = collect([char_source], xi_an_seg, limit=10)
+    texts = {c.text for c in out}
+
+    # With xi as first syllable, CharSource returns xi characters
+    assert "西" in texts
 
 
 def test_paginate_splits_into_full_pages_then_a_remainder():
