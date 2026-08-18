@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import math
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QPointF, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
 from ..render.animator import Timeline, Timing
@@ -42,6 +43,31 @@ class CanvasView(QWidget):
         self._timer = QTimer(self)
         self._timer.setInterval(FRAME_MS)
         self._timer.timeout.connect(self._tick)
+        self._sheet_size = QSize(1, 1)
+        self._sync_size()
+
+    # ---- geometry ----
+
+    def _sync_size(self) -> None:
+        """Keep the widget exactly as large as the sheet it paints.
+
+        Spec §6: the sheet is ``columns * advance * size_px`` wide and the view
+        *scrolls* when the window is narrower than that, rather than reflowing
+        or clipping. A widget can never be smaller than its minimum size, so
+        this is what makes the enclosing QScrollArea show scrollbars at the
+        right moment -- and it has to be re-applied whenever the sheet grows
+        (a new row, or an unwrapped carriage) or a layout reload rebuilds it.
+        """
+        width, height = self._sheet.size_px()
+        size = QSize(max(1, math.ceil(width)), max(1, math.ceil(height)))
+        if size == self._sheet_size:
+            return
+        self._sheet_size = size
+        self.setMinimumSize(size)
+        self.updateGeometry()
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        return self._sheet_size
 
     # ---- configuration ----
 
@@ -74,6 +100,7 @@ class CanvasView(QWidget):
             )
             self._done.clear()
             self._current = None
+        self._sync_size()
         self.update()
         return layout_changed
 
@@ -138,6 +165,7 @@ class CanvasView(QWidget):
         else:
             self._timeline = None
             self._timer.stop()
+        self._sync_size()
         self.update()
 
     def undo(self) -> None:
@@ -146,6 +174,7 @@ class CanvasView(QWidget):
             self._current = None
         elif self._done:
             self._done.pop()
+        self._sync_size()
         self.update()
 
     def clear(self) -> None:
@@ -153,6 +182,7 @@ class CanvasView(QWidget):
         self._done.clear()
         self._current = None
         self._sheet.clear()
+        self._sync_size()
         self.update()
 
     def replay(self) -> None:
@@ -176,8 +206,20 @@ class CanvasView(QWidget):
         self.update()
 
     def save(self, path: Path) -> None:
+        """Export the whole sheet, not the visible viewport.
+
+        ``self.grab()`` only ever captured what fitted in the window, so every
+        character past the third was missing from the saved image as well as
+        from the screen. Painting into a sheet-sized QImage through the same
+        ``_render`` the widget uses keeps the two from drifting apart.
+        """
+        image = QImage(self._sheet_size, QImage.Format.Format_ARGB32)
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        self._render(painter, image.rect())
+        painter.end()
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.grab().save(str(path), "PNG" if path.suffix.lower() != ".jpg" else "JPG")
+        image.save(str(path), "PNG" if path.suffix.lower() != ".jpg" else "JPG")
 
     # ---- painting ----
 
@@ -253,6 +295,13 @@ class CanvasView(QWidget):
 
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt naming
         del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        self._render(painter, self.rect())
+        painter.end()
+
+    def _render(self, painter: QPainter, rect) -> None:
+        """Paint the sheet into ``rect``. Shared by paintEvent and save()."""
         cfg = self._cfg
         background = str(cfg.get("canvas.background")) if cfg else "#fdfdf7"
         color = str(cfg.get("glyph.color")) if cfg else "#111111"
@@ -262,9 +311,7 @@ class CanvasView(QWidget):
         grid_color = str(cfg.get("canvas.grid_color")) if cfg else "#e5ded0"
         style = str(cfg.get("glyph.style")) if cfg else "brush"
 
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.fillRect(self.rect(), QColor(background))
+        painter.fillRect(rect, QColor(background))
 
         if grid_kind != "none":
             painter.setPen(self._pen(grid_color, 1.0, dashed=True))
@@ -295,4 +342,3 @@ class CanvasView(QWidget):
                 )
             else:
                 painter.drawPath(self._path(visible.strokes))
-        painter.end()

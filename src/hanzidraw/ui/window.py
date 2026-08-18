@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent, QKeyEvent
-from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QMainWindow, QScrollArea, QVBoxLayout, QWidget
 
 from ..config import data_dir, load_config
 from ..data.store import Store
@@ -65,11 +65,21 @@ class MainWindow(QMainWindow):
         self._store = store
         self._learn_path = learn_path or data_dir() / "learn.json"
         self.canvas = CanvasView()
+        # Spec §6: the sheet is `columns * advance * size_px` wide and the view
+        # SCROLLS when the window is narrower than that, and never reflows on
+        # resize -- hence widgetResizable(False), which leaves the canvas at its
+        # own sheet-driven size instead of squeezing it into the viewport.
+        # NoFocus matters: a focusable scroll area would swallow the arrow,
+        # Tab and PageUp/PageDown keys the candidate bar needs.
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(False)
+        self.scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.scroll.setWidget(self.canvas)
         self.bar = CandidateBar()
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.canvas, stretch=1)
+        layout.addWidget(self.scroll, stretch=1)
         layout.addWidget(self.bar)
         self.setCentralWidget(central)
         self._learn = Learn(self._learn_path, enabled=True)

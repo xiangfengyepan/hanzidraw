@@ -1,8 +1,11 @@
+import math
+
 import pytest
 
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QRect, Qt  # noqa: E402
+from PySide6.QtGui import QImage  # noqa: E402
 
 from hanzidraw.config import DEFAULTS, load_config  # noqa: E402
 from hanzidraw.data.store import Store  # noqa: E402
@@ -295,3 +298,89 @@ def test_a_layout_reload_clears_reports_it_and_the_next_commit_starts_at_the_fir
     pad = (window.canvas.sheet.pitch - window.canvas.sheet.size) / 2.0
     assert placed.ox == pytest.approx(pad)
     assert placed.oy == pytest.approx(pad)
+
+
+def test_the_canvas_is_in_a_scroll_area_sized_to_the_whole_sheet(qtbot, window):
+    # Spec §6: the sheet is columns * advance * size_px wide and the view
+    # scrolls when the window is narrower than that. Before this fix there was
+    # no QScrollArea anywhere, so at stock defaults (1656 x 276 px sheet in a
+    # 900 px window) the 4th, 5th and 6th character of every row were painted
+    # outside the widget with no scrollbar and no indication at all.
+    sheet = window.canvas.sheet
+    width, height = sheet.size_px()
+
+    assert window.scroll.widget() is window.canvas
+    assert window.scroll.widgetResizable() is False  # never reflow on resize
+    assert window.canvas.minimumWidth() == math.ceil(width)
+    assert window.canvas.minimumHeight() == math.ceil(height)
+
+
+def test_a_layout_reload_resizes_the_scrolled_canvas(qtbot, window, tmp_path):
+    before = window.canvas.minimumWidth()
+    path = tmp_path / "layout.toml"
+    path.write_text("[glyph]\nsize_px = 80\n", encoding="utf-8")
+    window.reload_config(path)
+
+    width, _height = window.canvas.sheet.size_px()
+    assert window.canvas.minimumWidth() == math.ceil(width)
+    assert window.canvas.minimumWidth() != before
+
+
+def test_scrollbars_appear_exactly_when_the_sheet_exceeds_the_viewport(qtbot, window):
+    window.resize(900, 700)  # the real app's startup size
+    window.show()
+    qtbot.waitExposed(window)
+    sheet_width = math.ceil(window.canvas.sheet.size_px()[0])
+    assert sheet_width > window.scroll.viewport().width()
+    assert window.scroll.horizontalScrollBar().maximum() > 0
+
+    # Wide enough for the whole sheet: nothing left to scroll.
+    window.resize(sheet_width + 400, 700)
+    qtbot.waitUntil(lambda: window.scroll.viewport().width() > sheet_width)
+    assert window.scroll.horizontalScrollBar().maximum() == 0
+
+
+def test_ctrl_s_exports_the_whole_sheet_not_just_the_visible_viewport(qtbot, tmp_path):
+    # Six characters at stock defaults do not fit in a 900 px window; grab()
+    # used to export the viewport only, so characters 4-6 were missing from the
+    # saved image as well as from the screen.
+    store = Store.create(tmp_path / "db.sqlite")
+    syllables = ["yi", "er", "san", "si", "wu", "liu"]
+    chars = "一二三四五六"
+    for syl, ch in zip(syllables, chars, strict=True):
+        store.add_char(ord(ch), 10, 2, MEDIANS, None)
+        store.add_reading(syl, ord(ch))
+    store.finish()
+    out_dir = tmp_path / "shots"
+    (tmp_path / "c.toml").write_text(
+        f'[output.image]\ndir = "{out_dir}"\n', encoding="utf-8"
+    )
+    win = MainWindow(
+        store=store,
+        cfg=load_config(tmp_path / "c.toml"),
+        learn_path=tmp_path / "learn.json",
+    )
+    qtbot.addWidget(win)
+    win.resize(900, 700)
+    win.show()
+    qtbot.waitExposed(win)
+
+    for syl in syllables:
+        _type(qtbot, win, syl)
+        qtbot.keyClick(win, Qt.Key.Key_Space)
+    assert win.canvas.glyph_count == 6
+
+    qtbot.keyClick(win, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+    saved = out_dir / "sheet.png"
+    assert saved.exists()
+
+    sheet = win.canvas.sheet
+    width, height = sheet.size_px()
+    image = QImage(str(saved))
+    assert (image.width(), image.height()) == (math.ceil(width), math.ceil(height))
+    assert image.width() > win.scroll.viewport().width()  # more than the viewport held
+    for placed in sheet.placed:
+        assert 0 <= placed.ox < image.width()
+        assert 0 <= placed.oy < image.height()
+        assert placed.ox + placed.size <= image.width()
+        assert placed.oy + placed.size <= image.height()

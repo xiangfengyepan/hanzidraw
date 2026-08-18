@@ -25,7 +25,10 @@ def view(qtbot, tmp_path):
 def test_outline_style_paints_without_outline_data(view):
     """A glyph with no outline must still draw — falling back to the brush."""
     view.commit(GLYPH, "十", 0.0, 0.0, 100.0)
-    assert view.grab().toImage().width() == 200
+    # The canvas is never smaller than the sheet it paints (it is scrolled, not
+    # squeezed), so resize(200, 200) is a lower bound, not the widget's size.
+    assert view.grab().toImage().width() == view.width()
+    assert view.width() >= 200
 
 
 def test_outline_style_uses_the_outline_when_it_is_supplied(view):
