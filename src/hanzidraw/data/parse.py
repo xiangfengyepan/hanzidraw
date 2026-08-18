@@ -143,6 +143,28 @@ def parse_cedict_line(line: str) -> CedictEntry | None:
     return CedictEntry(text=simplified, pinyin_key="".join(syllables))
 
 
+def parse_cedict_char_reading(line: str) -> tuple[str, str] | None:
+    """Harvest one (character, reading) pair from a CC-CEDICT single-character entry.
+
+    Reuses the same regex and normalisation as ``parse_cedict_line``; differs only in
+    requiring exactly one character and exactly one syllable, since a CEDICT entry has
+    one line per reading rather than one line per character.
+    """
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    m = _CEDICT.match(line)
+    if not m:
+        return None
+    simplified, pinyin = m.group(2), m.group(3)
+    if not _HANZI.match(simplified) or len(simplified) != 1:
+        return None
+    syllables = split_readings(pinyin)
+    if len(syllables) != 1 or not is_syllable(syllables[0]):
+        return None
+    return simplified, syllables[0]
+
+
 def parse_essay(text: str) -> list[tuple[str, float]]:
     pairs: list[tuple[str, float]] = []
     for line in text.splitlines():

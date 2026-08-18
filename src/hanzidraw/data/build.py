@@ -8,7 +8,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import mean
 
-from .parse import parse_cedict_line, parse_essay, parse_graphics_line, parse_hanzidb
+from .parse import (
+    parse_cedict_char_reading,
+    parse_cedict_line,
+    parse_essay,
+    parse_graphics_line,
+    parse_hanzidb,
+)
 from .store import Store
 
 Log = Callable[[str], None]
@@ -25,10 +31,12 @@ class BuildReport:
     duplicate_phrases: int = 0
     unknown_syllables: tuple[str, ...] = field(default_factory=tuple)
     outlines: bool = True
+    extra_readings: int = 0
 
     def summary(self) -> str:
         lines = [
-            f"{self.chars} characters with stroke data ({self.readings} readings)",
+            f"{self.chars} characters with stroke data ({self.readings} readings, "
+            f"{self.extra_readings} of them heteronym readings from CC-CEDICT)",
             f"{self.duplicate_chars} duplicate character rows in the source, skipped",
             f"{self.phrases} phrases, {self.phrases_dropped} dropped (undrawable characters)",
             f"{self.duplicate_phrases} duplicate phrase rows in the source, skipped",
@@ -78,6 +86,7 @@ def build(
     store = Store.create(db)
     ranks: dict[str, int] = {}
     seen: set[int] = set()
+    seen_readings: set[tuple[str, int]] = set()
 
     for row in rows:
         codepoint = ord(row.char)
@@ -101,6 +110,7 @@ def build(
         for reading in row.readings:
             store.add_reading(reading, codepoint)
             report.readings += 1
+            seen_readings.add((reading, codepoint))
 
     say("reading word frequencies")
     weights: dict[str, float] = {}
@@ -109,8 +119,9 @@ def build(
         weights = dict(parse_essay(_read_text(essay)))
 
     say("reading the phrase dictionary")
+    cedict_lines = _read_text(raw_dir / "cedict.txt.gz").splitlines()
     seen_phrases: set[tuple[str, str]] = set()
-    for line in _read_text(raw_dir / "cedict.txt.gz").splitlines():
+    for line in cedict_lines:
         entry = parse_cedict_line(line)
         if entry is None:
             continue
@@ -127,6 +138,23 @@ def build(
             weight = 1000.0 / (1.0 + mean(ranks[ch] for ch in entry.text))
         store.add_phrase(entry.pinyin_key, entry.text, float(weight))
         report.phrases += 1
+
+    say("harvesting heteronym readings from CC-CEDICT")
+    for line in cedict_lines:
+        got = parse_cedict_char_reading(line)
+        if got is None:
+            continue
+        char, reading = got
+        if char not in ranks:
+            continue  # rule 1: only for a character already stored in `char`
+        codepoint = ord(char)
+        pair = (reading, codepoint)
+        if pair in seen_readings:
+            continue  # rule 2: never duplicate a (pinyin, codepoint) pair
+        seen_readings.add(pair)
+        store.add_reading(reading, codepoint)
+        report.readings += 1
+        report.extra_readings += 1
 
     for name, digest in (digests or {}).items():
         store.set_meta(f"source_{name}_sha256", digest)

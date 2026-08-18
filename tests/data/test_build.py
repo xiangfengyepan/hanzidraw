@@ -106,3 +106,46 @@ def test_build_dedupes_duplicate_cedict_entries(tmp_path, fixtures):
     report = build(raw, tmp_path / "db.sqlite")
     assert report.duplicate_phrases == 1
     assert report.phrases == 1
+
+
+def test_build_harvests_extra_readings_only_for_stored_characters(tmp_path, fixtures):
+    raw = _raw(tmp_path, fixtures)
+    # Make 乐 drawable in THIS test's raw copy only: it has one hanziDB reading
+    # (lè) and a genuinely different CC-CEDICT reading (lao4), which is exactly
+    # the heteronym case this feature exists for.
+    with (raw / "graphics.txt").open("a", encoding="utf-8") as fh:
+        fh.write(
+            '\n{"character":"乐","strokes":["M 0 0 Z"],'
+            '"medians":[[[100,600],[900,600]],[[512,700],[512,200]]]}\n'
+        )
+    with (raw / "hanziDB.csv").open("a", encoding="utf-8") as fh:
+        fh.write("5,乐,lè,happy,丿,4.0,5,1,5,300\n")
+    with gzip.open(raw / "cedict.txt.gz", "rt", encoding="utf-8") as fh:
+        existing = fh.read()
+    extra = (fixtures / "cedict_chars_sample.u8").read_text(encoding="utf-8")
+    with gzip.open(raw / "cedict.txt.gz", "wt", encoding="utf-8") as fh:
+        fh.write(existing + "\n" + extra)
+
+    db = tmp_path / "db.sqlite"
+    report = build(raw, db)
+    store = Store.open(db)
+    # 乐 is drawable here, so its second CC-CEDICT reading was harvested…
+    assert {cp for cp, _py, _rank in store.chars_for_reading("le", limit=5)} == {ord("乐")}
+    assert {cp for cp, _py, _rank in store.chars_for_reading("lao", limit=5)} == {ord("乐")}
+    # …while 行 is not drawable in these fixtures, so nothing was inserted for it
+    assert store.chars_for_reading("hang", limit=5) == []
+    assert store.chars_for_reading("xing", limit=5) == []
+    assert report.extra_readings == 1
+
+
+def test_build_does_not_duplicate_a_reading_it_already_has(tmp_path, fixtures):
+    raw = _raw(tmp_path, fixtures)
+    with gzip.open(raw / "cedict.txt.gz", "rt", encoding="utf-8") as fh:
+        existing = fh.read()
+    with gzip.open(raw / "cedict.txt.gz", "wt", encoding="utf-8") as fh:
+        fh.write(existing + "\n一 一 [yi1] /one/\n")
+    db = tmp_path / "db.sqlite"
+    build(raw, db)
+    store = Store.open(db)
+    rows = store.chars_for_reading("yi", limit=10)
+    assert len([r for r in rows if r[0] == ord("一")]) == 1

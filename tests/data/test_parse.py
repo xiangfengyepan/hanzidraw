@@ -2,6 +2,7 @@ import pytest
 
 from hanzidraw.data.parse import (
     DataFormatError,
+    parse_cedict_char_reading,
     parse_cedict_line,
     parse_essay,
     parse_graphics_line,
@@ -118,3 +119,29 @@ def test_parse_essay_reads_word_and_weight(fixtures):
     pairs = parse_essay((fixtures / "essay_sample.txt").read_text(encoding="utf-8"))
     assert ("中国", 918273.0) in pairs
     assert len(pairs) == 3
+
+
+def _char_lines(fixtures):
+    return (fixtures / "cedict_chars_sample.u8").read_text(encoding="utf-8").splitlines()
+
+
+def test_char_reading_takes_the_simplified_char_and_a_toneless_reading(fixtures):
+    got = [parse_cedict_char_reading(line) for line in _char_lines(fixtures)]
+    assert ("乐", "le") in got
+    assert ("乐", "lao") in got
+    assert ("行", "hang") in got
+    assert ("行", "xing") in got
+    assert ("一", "yi") in got
+
+
+def test_char_reading_folds_a_capitalised_surname_reading(fixtures):
+    assert parse_cedict_char_reading("樂 乐 [Le4] /surname Le/") == ("乐", "le")
+
+
+def test_char_reading_rejects_everything_that_is_not_one_hanzi_and_one_syllable():
+    assert parse_cedict_char_reading("A A [A] /(slang) (Tw) to steal/") is None
+    assert parse_cedict_char_reading("瓩 瓩 [qian1 wa3] /kilowatt/") is None
+    assert parse_cedict_char_reading("啊 啊 [xq1] /not a syllable/") is None
+    assert parse_cedict_char_reading("北京 北京 [Bei3 jing1] /Beijing/") is None
+    assert parse_cedict_char_reading("# comment") is None
+    assert parse_cedict_char_reading("") is None
