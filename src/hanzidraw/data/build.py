@@ -8,6 +8,7 @@ import zlib
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean
 
@@ -18,7 +19,7 @@ from .parse import (
     parse_graphics_line,
     parse_hanzidb,
 )
-from .store import Store
+from .store import Store, StoreError
 
 Log = Callable[[str], None]
 
@@ -80,6 +81,31 @@ def _naming(path: Path) -> Iterator[None]:
         raise
 
 
+def _report_changed_sources(db: Path, digests: dict[str, str], say: Log) -> None:
+    """Record on the first build, compare on a rebuild, name what moved.
+
+    Spec §4 (amended): pinning expected hashes is not viable for sources served
+    from a moving ``master`` branch -- they change legitimately and a pinned hash
+    would fail every honest rebuild. So the digests recorded in ``meta`` are
+    compared against the ones just fetched and each changed source is named,
+    with both short digests. Provenance and change detection, not authentication.
+    """
+    if not digests or not db.exists():
+        return
+    try:
+        previous = Store.open(db)
+    except StoreError:
+        return  # nothing trustworthy to compare against
+    try:
+        for name in sorted(digests):
+            was = previous.get_meta(f"source_{name}_sha256")
+            now = digests[name]
+            if was and was != now:
+                say(f"source {name} changed since the last build: {was[:12]} -> {now[:12]}")
+    finally:
+        previous.close()
+
+
 def _read_text(path: Path) -> str:
     with _naming(path):
         if path.suffix == ".gz":
@@ -106,6 +132,8 @@ def build(
     """
     say = log or (lambda _msg: None)
     report = BuildReport(outlines=not medians_only)
+
+    _report_changed_sources(db, digests or {}, say)
 
     say("reading stroke data")
     geometry = {}
@@ -199,6 +227,9 @@ def build(
         for name, digest in (digests or {}).items():
             store.set_meta(f"source_{name}_sha256", digest)
         store.set_meta("build_medians_only", "1" if medians_only else "0")
+        # The field you want when diagnosing "why does my database differ from
+        # yours" (spec §4).
+        store.set_meta("build_date", datetime.now(UTC).isoformat(timespec="seconds"))
         # finish() is what stamps schema_version, so nothing before this point
         # can pass for a complete database.
         store.finish()

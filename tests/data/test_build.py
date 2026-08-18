@@ -220,3 +220,54 @@ def test_a_successful_rebuild_replaces_the_database_and_removes_the_temp_file(tm
     assert not db.with_suffix(".sqlite.tmp").exists()
     store = Store.open(db)
     assert store.has_char(ord("十"))
+
+
+def test_a_changed_source_is_reported_by_name_on_a_rebuild(tmp_path, fixtures):
+    # Spec §4 (amended): record on the first build, compare on a rebuild, and
+    # name each changed source. Upstream `master`-branch data legitimately
+    # changes, so this is a warning, not a failure.
+    raw = _raw(tmp_path, fixtures)
+    db = tmp_path / "db.sqlite"
+    build(raw, db, digests={"graphics": "a" * 64, "cedict": "b" * 64})
+
+    lines: list[str] = []
+    build(raw, db, digests={"graphics": "c" * 64, "cedict": "b" * 64}, log=lines.append)
+
+    changed = [line for line in lines if "changed" in line]
+    assert len(changed) == 1
+    assert "graphics" in changed[0]
+    assert "a" * 12 in changed[0] and "c" * 12 in changed[0]
+    assert "cedict" not in changed[0]
+
+
+def test_an_unchanged_source_is_not_reported(tmp_path, fixtures):
+    raw = _raw(tmp_path, fixtures)
+    db = tmp_path / "db.sqlite"
+    build(raw, db, digests={"graphics": "a" * 64})
+    lines: list[str] = []
+    build(raw, db, digests={"graphics": "a" * 64}, log=lines.append)
+    assert [line for line in lines if "changed" in line] == []
+
+
+def test_the_first_build_has_nothing_to_compare_against(tmp_path, fixtures):
+    lines: list[str] = []
+    build(
+        _raw(tmp_path, fixtures),
+        tmp_path / "db.sqlite",
+        digests={"graphics": "a" * 64},
+        log=lines.append,
+    )
+    assert [line for line in lines if "changed" in line] == []
+
+
+def test_build_records_an_iso_8601_utc_build_date(tmp_path, fixtures):
+    from datetime import UTC, datetime
+
+    db = tmp_path / "db.sqlite"
+    build(_raw(tmp_path, fixtures), db)
+    store = Store.open(db)
+    stamp = store.get_meta("build_date")
+    assert stamp is not None
+    when = datetime.fromisoformat(stamp)
+    assert when.tzinfo is not None
+    assert when.utcoffset() == UTC.utcoffset(None)

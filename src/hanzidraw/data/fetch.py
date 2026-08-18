@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import urllib.error
 import urllib.request
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -24,6 +26,23 @@ def sha256_of_file(path: Path, *, chunk: int = 1 << 20) -> str:
         for block in iter(lambda: fh.read(chunk), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def is_readable(path: Path, *, chunk: int = 1 << 16) -> bool:
+    """Whether a cached download can actually be read back.
+
+    A non-empty file says nothing about whether it decompresses: a truncated
+    ``.gz`` cache is the realistic route into a failed build, so it is checked
+    before being reused. Only the first block is read -- this runs on every
+    ``fetch-data``, against a 30 MB download.
+    """
+    try:
+        opener = gzip.open if path.suffix == ".gz" else open
+        with opener(path, "rb") as fh:  # type: ignore[operator]
+            fh.read(chunk)
+    except (OSError, zlib.error, EOFError):
+        return False
+    return True
 
 
 def download(

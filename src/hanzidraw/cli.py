@@ -14,7 +14,7 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
     import zlib
 
     from .data.build import build, failing_source
-    from .data.fetch import FetchError, fetch_all, sha256_of_file
+    from .data.fetch import FetchError, fetch_all, is_readable, sha256_of_file
     from .data.parse import DataFormatError
     from .data.sources import SOURCES
     from .data.store import StoreError
@@ -30,7 +30,13 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
     to_fetch = []
     for source in SOURCES:
         dest = raw / source.filename
-        if not args.refetch and dest.exists() and dest.stat().st_size > 0:
+        cached = not args.refetch and dest.exists() and dest.stat().st_size > 0
+        if cached and not is_readable(dest):
+            # st_size > 0 says nothing about whether the file decompresses, and a
+            # truncated cache is the live route into a failed build.
+            print(f"{source.filename} is corrupt or truncated; re-downloading")
+            cached = False
+        if cached:
             digests[source.name] = sha256_of_file(dest)
             print(f"reusing {source.filename} ({dest.stat().st_size / 1e6:.1f} MB)")
         else:
@@ -80,6 +86,7 @@ def _cmd_draw(args: argparse.Namespace) -> int:
     from .data.store import Store, StoreError
     from .output.base import Style, draw_glyph, load_glyph
     from .output.image import SvgBackend, save_png
+    from .render.sheet import Sheet
 
     cfg = load_config(Path(args.config) if args.config else None)
     size = float(args.size if args.size is not None else cfg.get("glyph.size_px"))
@@ -112,8 +119,6 @@ def _cmd_draw(args: argparse.Namespace) -> int:
         )
         return 1
 
-    advance = size * float(cfg.get("canvas.advance"))
-
     try:
         store = Store.open(Path(args.db) if args.db else db_path())
     except StoreError as exc:
@@ -125,9 +130,25 @@ def _cmd_draw(args: argparse.Namespace) -> int:
         print(f"no stroke data for: {' '.join(missing)}", file=sys.stderr)
         return 1
 
-    rows = (len(chars) + columns - 1) // columns
-    width = int(advance * min(len(chars), columns))
-    height = int(advance * rows)
+    # One source of cell origins: the Sheet the GUI uses. `draw` used to carry a
+    # character-for-character copy of the same formula, which agreed with the
+    # sheet only by textual coincidence -- and disagreed outright on
+    # canvas.wrap, which it never read at all.
+    sheet = Sheet(
+        columns=columns,
+        advance=float(cfg.get("canvas.advance")),
+        size=size,
+        wrap=bool(cfg.get("canvas.wrap")),
+    )
+    glyphs = [load_glyph(store, ord(ch)) for ch in chars]
+    placements = [sheet.add(glyph, ch) for glyph, ch in zip(glyphs, chars, strict=True)]
+
+    # Crop to the cells actually used rather than to a whole blank sheet: this is
+    # a one-shot render, not a practice page. Derived from the placements, so
+    # there is still no second origin formula to drift.
+    pad = (sheet.pitch - size) / 2.0
+    width = int(max(p.ox + p.size for p in placements) + pad)
+    height = int(max(p.oy + p.size for p in placements) + pad)
     backend = SvgBackend(
         width=width,
         height=height,
@@ -137,16 +158,13 @@ def _cmd_draw(args: argparse.Namespace) -> int:
             width=float(cfg.get("glyph.stroke_width_px")),
         ),
     )
-    pad = (advance - size) / 2.0
     outline_style = str(cfg.get("glyph.style")) == "outline"
     # Spec §6: stroke-order numbers belong to `single` mode -- a whole sheet of
     # numbered practice cells is unreadable.
     numbers = bool(cfg.get("glyph.stroke_numbers")) and str(cfg.get("canvas.mode")) == "single"
-    for index, ch in enumerate(chars):
-        ox = pad + advance * (index % columns)
-        oy = pad + advance * (index // columns)
-        codepoint = ord(ch)
-        glyph = load_glyph(store, codepoint)
+    for placed in placements:
+        codepoint = ord(placed.text)
+        ox, oy = placed.ox, placed.oy
         outline = store.outline(codepoint) if outline_style else None
         if outline:
             backend.begin_glyph(ox, oy, size)
@@ -156,9 +174,9 @@ def _cmd_draw(args: argparse.Namespace) -> int:
             # No outline for this character (mixed database), or the whole
             # database was built --medians-only: draw it rather than skip
             # it, so a mixed database still renders everything.
-            draw_glyph(backend, glyph, ox, oy, size)
+            draw_glyph(backend, placed.glyph, ox, oy, placed.size)
         if numbers:
-            backend.stroke_numbers(glyph, ox, oy, size)
+            backend.stroke_numbers(placed.glyph, ox, oy, placed.size)
 
     if outline_style and store.get_meta("build_medians_only") == "1":
         print(

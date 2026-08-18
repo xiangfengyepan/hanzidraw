@@ -146,3 +146,36 @@ def test_fetch_data_reports_a_message_not_a_traceback_for_a_corrupt_gzip_source(
     assert "--refetch" in captured.err
     assert not db.exists()
     assert not db.with_suffix(".sqlite.tmp").exists()
+
+
+def test_fetch_data_refetches_a_corrupt_cached_download(tmp_path, fixtures, capsys, monkeypatch):
+    """A non-empty file said nothing about whether it could be read back.
+
+    A truncated compressed cache was reused on the strength of st_size > 0
+    alone, which is the live route into a failed build.
+    """
+    raw = _raw_without_hanzidb(tmp_path, fixtures)
+    (raw / "hanziDB.csv").write_text(
+        (fixtures / "hanzidb_sample.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    # A good replacement upstream, served from a local file:// URL…
+    upstream = tmp_path / "upstream-cedict.txt.gz"
+    with gzip.open(upstream, "wt", encoding="utf-8") as fh:
+        fh.write((fixtures / "cedict_sample.u8").read_text(encoding="utf-8"))
+    patched_sources = tuple(
+        dataclasses.replace(s, url=upstream.resolve().as_uri()) if s.name == "cedict" else s
+        for s in sources.SOURCES
+    )
+    monkeypatch.setattr(sources, "SOURCES", patched_sources)
+    # …and a corrupt but non-empty cached copy.
+    (raw / "cedict.txt.gz").write_bytes(b"truncated, not a gzip stream")
+
+    db = tmp_path / "db.sqlite"
+    rc = cli.main(["fetch-data", "--raw-dir", str(raw), "--db", str(db)])
+
+    captured = capsys.readouterr()
+    assert rc == 0, captured.err
+    assert "cedict.txt.gz" in captured.out
+    assert "re-downloading" in captured.out
+    assert "reusing cedict.txt.gz" not in captured.out
+    assert db.exists()

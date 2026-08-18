@@ -32,6 +32,26 @@ def _qt_application():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_user_config(tmp_path, monkeypatch):
+    """No test may read or write the real user configuration.
+
+    Several CLI tests call ``cli.main(["draw", ...])`` with no ``--config``, so
+    they fall through to ``load_config(config_path())`` -- the owner's own
+    ``~/.config/hanzidraw/config.toml``. A machine with ``style = "outline"``
+    configured turned the suite red, and the owner is precisely the person who
+    has that file. Both platform locations are redirected, so a Windows run is
+    isolated too.
+
+    ``XDG_DATA_HOME``/``LOCALAPPDATA`` are deliberately *not* redirected: the
+    firmware golden test reads the real database read-only on purpose (it is the
+    comparison against the dictionary actually on the keyboard), and would skip
+    instead of xfailing if it could not find it.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+
+
 @pytest.fixture
 def fixtures() -> Path:
     return FIXTURES

@@ -123,6 +123,20 @@ The app refuses to start with a plain-language error, not a traceback, if the
 database is missing (`run 'hanzidraw fetch-data' first`) or was built by an
 incompatible version (`run 'hanzidraw fetch-data --rebuild'`).
 
+### Provenance, and what a rebuild is safe against
+
+Each source's SHA-256 is recorded in the database's `meta` table on the first
+build, together with a `build_date`. On a rebuild the digests are compared and
+every source that has changed upstream is named, with both short digests — a
+note, not a failure, because these files are served from moving `master`
+branches and genuinely do change. A cached download that no longer decompresses
+is re-downloaded rather than fed to the build.
+
+A rebuild is also safe against failing: the new database is built to a
+temporary file next to the old one and swapped into place only once it is
+complete, so a corrupt download costs you a message rather than the 20-minute
+database you already had.
+
 ## Using the IME
 
 Run `hanzidraw` (or `hanzidraw run`) to open the drawing window. Composition
@@ -324,7 +338,8 @@ anything else is a validation error rather than an SVG under a misleading name.
 
 Reads the same `config.toml` as the GUI (`--config PATH` to override, `--db
 PATH` for a non-default database), and the same `--size`, `--color`,
-`--columns` overrides. Reports which characters have no stroke data instead
+`--columns` overrides. Cells are laid out by the same sheet the window uses, so
+`canvas.columns`, `canvas.advance` and `canvas.wrap` mean the same thing here. Reports which characters have no stroke data instead
 of drawing a blank box, and reports file-write failures (permission denied,
 parent path is not a directory, etc.) as a message rather than a traceback.
 

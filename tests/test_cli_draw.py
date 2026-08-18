@@ -262,3 +262,104 @@ def test_an_unrecognised_output_suffix_is_a_clean_validation_error(tmp_path, cap
     assert ".svg" in captured.err and ".png" in captured.err
     assert "Traceback" not in captured.err
     assert not out.exists()
+
+
+def _make_store_with_eight(path):
+    store = Store.create(path)
+    for index, ch in enumerate("一二三四五六七八"):
+        store.add_char(ord(ch), index + 1, 1, (((-400, 0), (400, 0)),), None)
+    store.finish()
+    store.close()
+    return path
+
+
+def _svg_origins(svg: str) -> list[tuple[float, float]]:
+    """The (ox, oy) of each glyph group the backend emitted."""
+    return [
+        (float(parts[0]), float(parts[1]))
+        for parts in (chunk.split('"')[0].split(",") for chunk in svg.split('data-glyph="')[1:])
+    ]
+
+
+def _svg_size(svg: str) -> tuple[int, int]:
+    return (
+        int(svg.split('width="')[1].split('"')[0]),
+        int(svg.split('height="')[1].split('"')[0]),
+    )
+
+
+def test_draw_places_cells_exactly_where_the_sheet_does(tmp_path):
+    # I4: cli.py and render/sheet.py computed cell origins with two
+    # character-for-character identical formulas, so they agreed only by textual
+    # coincidence. The sheet is now the single source.
+    from hanzidraw.config import load_config
+    from hanzidraw.render.glyph import Glyph
+    from hanzidraw.render.sheet import Sheet
+
+    db = _make_store_with_eight(tmp_path / "db.sqlite")
+    out = tmp_path / "out.svg"
+    cfg_path = tmp_path / "c.toml"
+    cfg_path.write_text("", encoding="utf-8")
+    cfg = load_config(cfg_path)
+
+    rc = cli.main(
+        ["draw", "一二三四五六七八", "-o", str(out), "--db", str(db), "--config", str(cfg_path)]
+    )
+    assert rc == 0
+
+    sheet = Sheet(
+        columns=int(cfg.get("canvas.columns")),
+        advance=float(cfg.get("canvas.advance")),
+        size=float(cfg.get("glyph.size_px")),
+        wrap=bool(cfg.get("canvas.wrap")),
+    )
+    expected = [
+        (placed.ox, placed.oy) for placed in [sheet.add(Glyph(()), ch) for ch in "一二三四五六七八"]
+    ]
+    assert _svg_origins(out.read_text(encoding="utf-8")) == expected
+
+
+def test_draw_honours_canvas_wrap(tmp_path):
+    # `draw` never read canvas.wrap at all: at index 7 with wrap = false the
+    # sheet gives (1950.0, 18.0) and the old CLI formula gave (294.0, 294.0).
+    db = _make_store_with_eight(tmp_path / "db.sqlite")
+    text = "一二三四五六七八"
+
+    wrapped = tmp_path / "wrap.toml"
+    wrapped.write_text("[canvas]\nwrap = true\n", encoding="utf-8")
+    out_wrapped = tmp_path / "wrapped.svg"
+    assert (
+        cli.main(["draw", text, "-o", str(out_wrapped), "--db", str(db), "--config", str(wrapped)])
+        == 0
+    )
+
+    flat = tmp_path / "flat.toml"
+    flat.write_text("[canvas]\nwrap = false\n", encoding="utf-8")
+    out_flat = tmp_path / "flat.svg"
+    assert (
+        cli.main(["draw", text, "-o", str(out_flat), "--db", str(db), "--config", str(flat)]) == 0
+    )
+
+    wrapped_svg = out_wrapped.read_text(encoding="utf-8")
+    flat_svg = out_flat.read_text(encoding="utf-8")
+    pitch = 240.0 * 1.15  # glyph.size_px * canvas.advance, the stock defaults
+    pad = (pitch - 240.0) / 2.0
+
+    # wrap = true: six columns then a second row.
+    assert _svg_origins(wrapped_svg)[6] == (pad, pad + pitch)
+    assert _svg_size(wrapped_svg) == (int(6 * pitch), int(2 * pitch))
+
+    # wrap = false: one long row, which is what the sheet has always done.
+    assert _svg_origins(flat_svg)[7] == (pad + 7 * pitch, pad)
+    assert _svg_size(flat_svg) == (int(8 * pitch), int(pitch))
+
+
+def test_draw_canvas_size_is_unchanged_for_a_partial_row(tmp_path):
+    # A one-character render must still be one cell, not a whole blank sheet.
+    db = _make_store(tmp_path / "db.sqlite")
+    out = tmp_path / "out.svg"
+    cfg_path = tmp_path / "c.toml"
+    cfg_path.write_text("", encoding="utf-8")
+
+    assert cli.main(["draw", "沣", "-o", str(out), "--db", str(db), "--config", str(cfg_path)]) == 0
+    assert _svg_size(out.read_text(encoding="utf-8")) == (276, 276)
