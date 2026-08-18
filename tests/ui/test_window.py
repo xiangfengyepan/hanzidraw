@@ -63,6 +63,41 @@ def test_a_phrase_commits_two_glyphs_in_one_keystroke(qtbot, window):
     assert window.canvas.glyph_count == 2
 
 
+def test_mouse_backend_without_pynput_falls_back_to_canvas_and_reports_it(
+    qtbot, tmp_path, monkeypatch
+):
+    # pynput is genuinely unimportable in this headless environment, but the
+    # test must not depend on that host fact: monkeypatching PynputPointer
+    # itself keeps this deterministic (and safe) on any machine, including
+    # one with a real display and pynput installed, where relying on the
+    # environment would otherwise let a real MouseBackend seize the pointer.
+    from hanzidraw.output import mouse as mouse_module
+
+    def _raise_import_error(self, *_a, **_kw):
+        raise ImportError("no pynput")
+
+    monkeypatch.setattr(mouse_module.PynputPointer, "__init__", _raise_import_error)
+
+    (tmp_path / "c.toml").write_text('[output]\nbackend = "mouse"\n', encoding="utf-8")
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("十"), 10, 2, MEDIANS, None)
+    store.add_reading("shi", ord("十"))
+    store.finish()
+    win = MainWindow(
+        store=store,
+        cfg=load_config(tmp_path / "c.toml"),
+        learn_path=tmp_path / "learn.json",
+    )
+    qtbot.addWidget(win)
+
+    _type(qtbot, win, "shi")
+    qtbot.keyClick(win, Qt.Key.Key_Space)
+
+    assert "pynput" in win.statusBar().currentMessage()
+    assert win.canvas.glyph_count == 1
+    assert getattr(win, "_mouse", None) is None  # never set up; abort has nothing to grab
+
+
 def test_f2_toggles_the_canvas_mode(qtbot, window):
     qtbot.keyClick(window, Qt.Key.Key_F2)
     assert window.canvas._mode == "single"

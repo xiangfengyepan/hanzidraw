@@ -28,6 +28,3 @@ class CanvasBackend:
         ox, oy, size = self._box
         self._view.commit(Glyph(tuple(self._strokes)), self._text, ox, oy, size)
         self._strokes = []
-
-    def advance(self) -> None:
-        return

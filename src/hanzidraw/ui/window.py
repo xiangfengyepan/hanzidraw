@@ -13,8 +13,9 @@ from ..data.store import Store
 from ..ime.learn import Learn
 from ..ime.session import Key, Session
 from ..ime.sources import CharSource, PhraseSource
-from ..output.base import draw_glyph, load_glyph
+from ..output.base import Style, draw_glyph, load_glyph
 from ..output.canvas import CanvasBackend
+from ..output.mouse import MouseAbort
 from .candidatebar import CandidateBar
 from .canvasview import CanvasView
 
@@ -155,17 +156,76 @@ class MainWindow(QMainWindow):
         elif action == "step_back":
             self.canvas.step(-1)
         elif action == "abort":
-            self.status("nothing to abort")
+            backend = getattr(self, "_mouse", None)
+            if backend is None:
+                self.status("nothing to abort")
+            else:
+                backend.stop()
+                self.status("draw aborted")
+
+    def _backend(self):
+        which = str(self._cfg.get("output.backend"))
+        if which == "mouse":
+            from ..output.mouse import MouseBackend, PynputPointer  # noqa: PLC0415
+
+            try:
+                pointer = PynputPointer(str(self._cfg.get("output.mouse.button")))
+            except ImportError:
+                self.status("mouse output needs pynput: pip install 'hanzidraw[mouse]'")
+                return CanvasBackend(self.canvas)
+            clamp = None
+            if bool(self._cfg.get("output.mouse.clamp_to_screen")):
+                geo = self.screen().geometry()
+                clamp = (
+                    float(geo.left()),
+                    float(geo.top()),
+                    float(geo.right()),
+                    float(geo.bottom()),
+                )
+            self._mouse = MouseBackend(
+                pointer,
+                scale=float(self._cfg.get("output.mouse.scale")),
+                step_delay_ms=float(self._cfg.get("output.mouse.step_delay_ms")),
+                clamp=clamp,
+            )
+            return self._mouse
+        if which == "image":
+            from ..output.image import SvgBackend  # noqa: PLC0415
+
+            return SvgBackend(
+                width=int(self.canvas.width()),
+                height=int(self.canvas.height()),
+                background=str(self._cfg.get("canvas.background")),
+                style=Style(
+                    color=str(self._cfg.get("glyph.color")),
+                    width=float(self._cfg.get("glyph.stroke_width_px")),
+                ),
+            )
+        return CanvasBackend(self.canvas)
 
     def commit_candidate(self, cand) -> None:
-        backend = CanvasBackend(self.canvas)
-        for codepoint in cand.codepoints:
-            if not self._store.has_char(codepoint):
-                self.status(f"no stroke data for {chr(codepoint)}")
-                continue
-            placed = self.canvas.sheet.add(load_glyph(self._store, codepoint), chr(codepoint))
-            backend.set_text(placed.text)
-            draw_glyph(backend, placed.glyph, placed.ox, placed.oy, placed.size)
+        backend = self._backend()
+        stop_listener = None
+        if backend is getattr(self, "_mouse", None):
+            from ..output.mouse import listen_for_abort  # noqa: PLC0415
+
+            stop_listener = listen_for_abort(backend)
+        try:
+            for codepoint in cand.codepoints:
+                if not self._store.has_char(codepoint):
+                    self.status(f"no stroke data for {chr(codepoint)}")
+                    continue
+                placed = self.canvas.sheet.add(load_glyph(self._store, codepoint), chr(codepoint))
+                if isinstance(backend, CanvasBackend):
+                    backend.set_text(placed.text)
+                try:
+                    draw_glyph(backend, placed.glyph, placed.ox, placed.oy, placed.size)
+                except MouseAbort as exc:
+                    self.status(str(exc))
+                    break
+        finally:
+            if stop_listener is not None:
+                stop_listener()
 
     # ---- lifecycle ----
 

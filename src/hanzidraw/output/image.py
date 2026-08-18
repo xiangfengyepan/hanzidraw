@@ -32,9 +32,6 @@ class SvgBackend:
     def end_glyph(self) -> None:
         self._parts.append("</g>")
 
-    def advance(self) -> None:  # the sheet owns layout; nothing to do here
-        return
-
     def to_svg(self) -> str:
         head = (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.width}" '

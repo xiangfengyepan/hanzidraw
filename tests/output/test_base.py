@@ -16,9 +16,6 @@ class RecordingBackend:
     def end_glyph(self):
         self.events.append(("end",))
 
-    def advance(self):
-        self.events.append(("advance",))
-
 
 def test_draw_glyph_emits_begin_then_every_stroke_then_end():
     backend = RecordingBackend()
