@@ -59,6 +59,56 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
     return 0 if report.chars else 1
 
 
+def _cmd_draw(args: argparse.Namespace) -> int:
+    from .config import load_config
+    from .data.store import Store, StoreError
+    from .output.base import Style, draw_glyph, load_glyph
+    from .output.image import SvgBackend, save_png
+
+    cfg = load_config(Path(args.config) if args.config else None)
+    size = float(args.size or cfg.get("glyph.size_px"))
+    advance = size * float(cfg.get("canvas.advance"))
+    columns = int(args.columns or cfg.get("canvas.columns"))
+
+    try:
+        store = Store.open(Path(args.db) if args.db else db_path())
+    except StoreError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    chars = [ch for ch in args.text if not ch.isspace()]
+    missing = [ch for ch in chars if not store.has_char(ord(ch))]
+    if missing:
+        print(f"no stroke data for: {' '.join(missing)}", file=sys.stderr)
+        return 1
+
+    rows = (len(chars) + columns - 1) // columns
+    width = int(advance * min(len(chars), columns))
+    height = int(advance * rows)
+    backend = SvgBackend(
+        width=width,
+        height=height,
+        background=str(cfg.get("canvas.background")),
+        style=Style(
+            color=str(args.color or cfg.get("glyph.color")),
+            width=float(cfg.get("glyph.stroke_width_px")),
+        ),
+    )
+    pad = (advance - size) / 2.0
+    for index, ch in enumerate(chars):
+        ox = pad + advance * (index % columns)
+        oy = pad + advance * (index // columns)
+        draw_glyph(backend, load_glyph(store, ord(ch)), ox, oy, size)
+
+    out = Path(args.output)
+    if out.suffix.lower() == ".png":
+        save_png(backend, out)
+    else:
+        backend.save(out)
+    print(f"wrote {out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hanzidraw", description=__doc__)
     parser.add_argument("--version", action="version", version=__version__)
@@ -73,6 +123,16 @@ def main(argv: list[str] | None = None) -> int:
     fetch.add_argument("--raw-dir", default=None)
     fetch.add_argument("--db", default=None)
     fetch.set_defaults(func=_cmd_fetch_data)
+
+    draw = sub.add_parser("draw", help="render text to an SVG or PNG file without the GUI")
+    draw.add_argument("text", help="the characters to draw, e.g. 沣潘叶祥")
+    draw.add_argument("-o", "--output", required=True, help="out.svg or out.png")
+    draw.add_argument("--size", type=float, default=None)
+    draw.add_argument("--color", default=None)
+    draw.add_argument("--columns", type=int, default=None)
+    draw.add_argument("--config", default=None)
+    draw.add_argument("--db", default=None)
+    draw.set_defaults(func=_cmd_draw)
 
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
