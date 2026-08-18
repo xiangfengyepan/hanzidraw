@@ -82,9 +82,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.scroll, stretch=1)
         layout.addWidget(self.bar)
         self.setCentralWidget(central)
-        self._learn = Learn(self._learn_path, enabled=True)
-        self._session = Session([PhraseSource(store), CharSource(store)])
-        self.apply_config(cfg)
+        self.apply_config(cfg)  # builds the Learn store and the Session
         self.canvas.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -103,9 +101,17 @@ class MainWindow(QMainWindow):
             learn=self._learn,
             max_candidates=int(cfg.get("ime.max_candidates")),
         )
-        self.setWindowFlag(
-            Qt.WindowType.WindowStaysOnTopHint, bool(cfg.get("canvas.always_on_top"))
-        )
+        on_top = bool(cfg.get("canvas.always_on_top"))
+        if bool(self.windowFlags() & Qt.WindowType.WindowStaysOnTopHint) != on_top:
+            # Qt re-parents and *hides* an already-created widget when its window
+            # flags change. Calling this on every reload therefore made the window
+            # vanish for good -- there is no tray icon and no way back, and the
+            # drawn sheet went with it. Change the flag only when the value really
+            # changed, and show the window again if it was on screen.
+            was_visible = self.isVisible()
+            self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, on_top)
+            if was_visible:
+                self.show()
         messages = list(cfg.errors) + list(cfg.warnings)
         if (
             cfg.get("glyph.style") == "outline"
@@ -157,8 +163,15 @@ class MainWindow(QMainWindow):
             self.canvas.clear()
         elif action == "save":
             target = Path(str(self._cfg.get("output.image.dir"))).expanduser() / "sheet.png"
-            self.canvas.save(target)
-            self.status(f"saved {target}")
+            try:
+                self.canvas.save(target)
+            except OSError as exc:
+                # A paintEvent-adjacent Qt path has nowhere to put a traceback,
+                # and reporting "saved" for a write that never happened is worse
+                # than the failure itself.
+                self.status(f"could not save {target}: {exc.strerror or exc}")
+            else:
+                self.status(f"saved {target}")
         elif action == "replay":
             self.canvas.replay()
         elif action == "step_forward":

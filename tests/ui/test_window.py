@@ -1,4 +1,5 @@
 import math
+import os
 
 import pytest
 
@@ -384,3 +385,135 @@ def test_ctrl_s_exports_the_whole_sheet_not_just_the_visible_viewport(qtbot, tmp
         assert 0 <= placed.oy < image.height()
         assert placed.ox + placed.size <= image.width()
         assert placed.oy + placed.size <= image.height()
+
+
+def test_toggling_always_on_top_at_runtime_keeps_the_window_visible(qtbot, window, tmp_path):
+    # C3: apply_config called setWindowFlag on every reload, and Qt re-parents
+    # and *hides* a created widget when its flags change. Nothing called show()
+    # again, so the window vanished for good -- no tray icon, no way back, and
+    # the drawn sheet gone with it.
+    window.show()
+    qtbot.waitExposed(window)
+    assert window.isVisible()
+
+    on = tmp_path / "on.toml"
+    on.write_text("[canvas]\nalways_on_top = true\n", encoding="utf-8")
+    window.reload_config(on)
+    assert window.isVisible()
+    assert bool(window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
+
+    off = tmp_path / "off.toml"
+    off.write_text("[canvas]\nalways_on_top = false\n", encoding="utf-8")
+    window.reload_config(off)
+    assert window.isVisible()
+    assert not bool(window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
+
+
+def test_a_reload_that_does_not_change_always_on_top_leaves_the_flag_alone(
+    qtbot, window, tmp_path
+):
+    window.show()
+    qtbot.waitExposed(window)
+    before = window.windowFlags()
+
+    path = tmp_path / "paint.toml"
+    path.write_text('[glyph]\ncolor = "#ff0000"\n', encoding="utf-8")
+    window.reload_config(path)
+
+    assert window.windowFlags() == before
+    assert window.isVisible()
+
+
+def test_ctrl_s_into_an_unwritable_directory_reports_a_message_not_an_exception(
+    qtbot, tmp_path
+):
+    # I5: save() discarded the boolean from QImage.save(), so a write that
+    # failed without raising still printed "saved …"; and an unwritable
+    # directory threw straight out of the Qt key handler.
+    if os.geteuid() == 0:
+        pytest.skip("root ignores directory write permissions")
+
+    ro_dir = tmp_path / "ro"
+    ro_dir.mkdir()
+    (tmp_path / "c.toml").write_text(
+        f'[output.image]\ndir = "{ro_dir}"\n', encoding="utf-8"
+    )
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("十"), 10, 2, MEDIANS, None)
+    store.add_reading("shi", ord("十"))
+    store.finish()
+    win = MainWindow(
+        store=store,
+        cfg=load_config(tmp_path / "c.toml"),
+        learn_path=tmp_path / "learn.json",
+    )
+    qtbot.addWidget(win)
+    _type(qtbot, win, "shi")
+    qtbot.keyClick(win, Qt.Key.Key_Space)
+
+    ro_dir.chmod(0o555)
+    try:
+        qtbot.keyClick(win, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+    finally:
+        ro_dir.chmod(0o755)
+
+    message = win.statusBar().currentMessage()
+    assert "could not save" in message
+    assert str(ro_dir / "sheet.png") in message
+    assert not (ro_dir / "sheet.png").exists()
+
+
+def test_ctrl_s_whose_directory_cannot_be_created_reports_a_message(qtbot, tmp_path):
+    if os.geteuid() == 0:
+        pytest.skip("root ignores directory write permissions")
+
+    ro_dir = tmp_path / "ro"
+    ro_dir.mkdir()
+    target_dir = ro_dir / "nested"
+    (tmp_path / "c.toml").write_text(
+        f'[output.image]\ndir = "{target_dir}"\n', encoding="utf-8"
+    )
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("十"), 10, 2, MEDIANS, None)
+    store.add_reading("shi", ord("十"))
+    store.finish()
+    win = MainWindow(
+        store=store,
+        cfg=load_config(tmp_path / "c.toml"),
+        learn_path=tmp_path / "learn.json",
+    )
+    qtbot.addWidget(win)
+    _type(qtbot, win, "shi")
+    qtbot.keyClick(win, Qt.Key.Key_Space)
+
+    ro_dir.chmod(0o555)
+    try:
+        qtbot.keyClick(win, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+    finally:
+        ro_dir.chmod(0o755)
+
+    assert "could not save" in win.statusBar().currentMessage()
+
+
+def test_ctrl_s_reports_success_only_when_the_file_is_really_written(qtbot, tmp_path):
+    out_dir = tmp_path / "shots"
+    (tmp_path / "c.toml").write_text(
+        f'[output.image]\ndir = "{out_dir}"\n', encoding="utf-8"
+    )
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("十"), 10, 2, MEDIANS, None)
+    store.add_reading("shi", ord("十"))
+    store.finish()
+    win = MainWindow(
+        store=store,
+        cfg=load_config(tmp_path / "c.toml"),
+        learn_path=tmp_path / "learn.json",
+    )
+    qtbot.addWidget(win)
+    _type(qtbot, win, "shi")
+    qtbot.keyClick(win, Qt.Key.Key_Space)
+    qtbot.keyClick(win, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+
+    saved = out_dir / "sheet.png"
+    assert saved.exists() and saved.stat().st_size > 0
+    assert win.statusBar().currentMessage() == f"saved {saved}"

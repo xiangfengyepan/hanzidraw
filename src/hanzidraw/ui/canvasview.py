@@ -219,7 +219,10 @@ class CanvasView(QWidget):
         self._render(painter, image.rect())
         painter.end()
         path.parent.mkdir(parents=True, exist_ok=True)
-        image.save(str(path), "PNG" if path.suffix.lower() != ".jpg" else "JPG")
+        if not image.save(str(path), "PNG" if path.suffix.lower() != ".jpg" else "JPG"):
+            # QImage.save() reports failure by returning False, so discarding it
+            # let a failed write be announced as a success.
+            raise OSError(f"could not write {path}")
 
     # ---- painting ----
 
