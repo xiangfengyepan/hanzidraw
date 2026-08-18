@@ -100,10 +100,10 @@ def test_phrases_for_prefix_deduplicates_by_text_and_keeps_max_weight(tmp_path):
     assert [w for t, w in rows if t == "测度"] == [100.0]
 
 
-def test_phrases_for_prefix_ordering_is_deterministic_on_ties(tmp_path):
-    """Same weight and length -> consistent text order across calls."""
-    store = Store.create(tmp_path / "db_det.sqlite")
-    # Add two phrases with identical weight and length
+def test_phrases_for_key_ordering_is_deterministic_on_ties(tmp_path):
+    """phrases_for_key: same weight and length -> consistent text order."""
+    store = Store.create(tmp_path / "db_det_key.sqlite")
+    # Add phrases with identical weight and length under one key
     store.add_phrase("testkey", "aaa", 500.0)
     store.add_phrase("testkey", "bbb", 500.0)
     store.add_phrase("testkey", "zzz", 500.0)
@@ -112,3 +112,22 @@ def test_phrases_for_prefix_ordering_is_deterministic_on_ties(tmp_path):
     for _ in range(3):
         rows = store.phrases_for_key("testkey", limit=10)
         assert [t for t, w in rows] == ["aaa", "bbb", "zzz"]
+
+
+def test_phrases_for_prefix_ordering_is_deterministic_on_ties(tmp_path):
+    """phrases_for_prefix: same weight/length across keys -> stable order."""
+    store = Store.create(tmp_path / "db_det_prefix.sqlite")
+    # Add three texts with identical weight and length under different keys
+    # sharing a prefix (ce*).
+    store.add_phrase("ceaaa", "测试", 500.0)
+    store.add_phrase("cebbb", "测试", 500.0)  # Same text, different key
+    store.add_phrase("ceccb", "测试", 500.0)  # Same text, another key
+    store.finish()
+    # Call multiple times and verify the text appears only once with stable order
+    for _ in range(3):
+        rows = store.phrases_for_prefix("ce", limit=10)
+        texts = [t for t, w in rows]
+        # Should appear exactly once due to GROUP BY dedup
+        assert texts.count("测试") == 1
+        # And weight should be the max (all are 500.0)
+        assert [w for t, w in rows if t == "测试"] == [500.0]
