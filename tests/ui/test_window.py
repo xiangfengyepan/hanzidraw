@@ -2,7 +2,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtCore import QRect, Qt  # noqa: E402
 
 from hanzidraw.config import DEFAULTS, load_config  # noqa: E402
 from hanzidraw.data.store import Store  # noqa: E402
@@ -120,6 +120,40 @@ def test_image_backend_in_the_window_falls_back_to_canvas_and_reports_it(qtbot, 
 
     assert "draw command" in win.statusBar().currentMessage()
     assert win.canvas.glyph_count == 1
+
+
+def test_mouse_clamp_uses_the_screens_last_addressable_pixel_not_one_past_it(
+    qtbot, tmp_path, monkeypatch
+):
+    # Coordinator correction (task-18 second review): this is a direct
+    # regression test for the specific line that was wrong -- _backend()'s
+    # construction of the clamp box from the real screen geometry. A 1920-
+    # wide screen's last addressable pixel column is 1919 (QRect.right());
+    # a prior fix mistakenly added 1, which would let the clamp place the
+    # cursor one column past the real screen.
+    from hanzidraw.output import mouse as mouse_module
+
+    monkeypatch.setattr(mouse_module.PynputPointer, "__init__", lambda self, *_a, **_kw: None)
+
+    (tmp_path / "c.toml").write_text('[output]\nbackend = "mouse"\n', encoding="utf-8")
+    store = Store.create(tmp_path / "db.sqlite")
+    store.finish()
+    win = MainWindow(
+        store=store,
+        cfg=load_config(tmp_path / "c.toml"),
+        learn_path=tmp_path / "learn.json",
+    )
+    qtbot.addWidget(win)
+
+    class _FakeScreen:
+        def geometry(self):
+            return QRect(0, 0, 1920, 1080)
+
+    monkeypatch.setattr(win, "screen", lambda: _FakeScreen())
+
+    win._backend()
+
+    assert win._mouse._clamp == (0.0, 0.0, 1919.0, 1079.0)
 
 
 def test_f2_toggles_the_canvas_mode(qtbot, window):

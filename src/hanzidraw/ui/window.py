@@ -176,13 +176,21 @@ class MainWindow(QMainWindow):
             clamp = None
             if bool(self._cfg.get("output.mouse.clamp_to_screen")):
                 geo = self.screen().geometry()
-                # QRect.right()/bottom() are one pixel short of the true edge
-                # by Qt convention; add it back so clamping matches the screen.
+                # QRect.right()/bottom() are the last *addressable pixel*
+                # (x()+width()-1), not the geometric edge (x()+width()) --
+                # and PynputPointer.move_to rounds to an int pixel column, so
+                # this is exactly the bound a placed cursor must not exceed.
+                # A previous fix mistakenly added 1 here to "correct" for
+                # QRect's continuous-geometry convention; that let the clamp
+                # place the cursor one column past the real screen, which a
+                # single monitor silently re-clamps but which spills onto an
+                # adjacent display on a multi-monitor desktop -- precisely
+                # what clamp_to_screen exists to prevent. Do not add 1 back.
                 clamp = (
                     float(geo.left()),
                     float(geo.top()),
-                    float(geo.right() + 1),
-                    float(geo.bottom() + 1),
+                    float(geo.right()),
+                    float(geo.bottom()),
                 )
             self._mouse = MouseBackend(
                 pointer,

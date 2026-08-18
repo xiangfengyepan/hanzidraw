@@ -214,6 +214,25 @@ def test_scale_is_applied_before_clamp_so_clamping_stays_a_hard_guarantee():
     assert moves[-1] == (50.0, 0.0)  # 40 * scale(2) = 80, clamped down to the edge
 
 
+def test_clamp_caps_at_the_screens_last_addressable_pixel_not_one_past_it():
+    # Coordinator correction (task-18 second review): a screen's right edge
+    # for cursor placement is its *last addressable pixel column*, not the
+    # geometric boundary one past it. For a 1920-wide screen that column is
+    # 1919 (valid x range 0..1919) -- Qt's QRect.right() reports exactly
+    # that (x() + width() - 1). A prior fix mistakenly added 1 to "correct"
+    # for QRect's continuous-geometry convention, which would let a clamped
+    # cursor land at column 1920: off the real screen, and onto an adjacent
+    # monitor on a multi-monitor desktop. Pin the bound here so it can't be
+    # "fixed" back to +1 without a test noticing.
+    pointer = FakePointer()
+    screen_1920x1080 = (0.0, 0.0, 1919.0, 1079.0)
+    glyph = Glyph((((0.0, 0.0), (5.0, 0.0)),))  # far beyond the right edge once placed
+    draw_glyph(_backend(pointer, clamp=screen_1920x1080), glyph, 0.0, 0.0, 1000.0)
+    xs = [x for _kind, x, _y in [e for e in pointer.events if e[0] == "move"]]
+    assert max(xs) == 1919.0
+    assert max(xs) != 1920.0
+
+
 def test_end_glyph_does_not_touch_the_pointer():
     # Ruling B (coordinator, task-18): advance() was removed from the Backend
     # protocol entirely (it had no callers anywhere in the codebase), and
