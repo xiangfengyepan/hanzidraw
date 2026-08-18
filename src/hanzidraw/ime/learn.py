@@ -1,7 +1,8 @@
 """Remembers which candidate you actually pick for a given pinyin key.
 
-Stored as ``{"key\\ttext": [count, last_seq]}``. The bonus dominates the base
-weight so a learned pick wins, and recency breaks ties between equal counts.
+Stored as a dict mapping JSON-encoded [key, text] pairs to [count, last_seq].
+The bonus dominates the base weight so a learned pick wins, and recency breaks
+ties between equal counts.
 """
 
 from __future__ import annotations
@@ -22,14 +23,24 @@ class Learn:
         if enabled and path and path.exists():
             try:
                 raw = json.loads(path.read_text(encoding="utf-8"))
-                self._entries = {k: [float(v[0]), float(v[1])] for k, v in raw.items()}
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                raw = None
+            if isinstance(raw, dict):
+                for key, value in raw.items():
+                    if (
+                        isinstance(key, str)
+                        and isinstance(value, list)
+                        and len(value) == 2
+                        and all(
+                            isinstance(v, (int, float)) and not isinstance(v, bool) for v in value
+                        )
+                    ):
+                        self._entries[key] = [float(value[0]), float(value[1])]
                 self._seq = max((v[1] for v in self._entries.values()), default=0.0)
-            except (json.JSONDecodeError, ValueError, TypeError, OSError, KeyError, IndexError):
-                self._entries = {}
 
     @staticmethod
     def _key(key: str, text: str) -> str:
-        return f"{key}\t{text}"
+        return json.dumps([key, text], ensure_ascii=False)
 
     def bonus(self, key: str, text: str) -> float:
         if not self.enabled:
