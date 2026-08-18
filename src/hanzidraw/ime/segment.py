@@ -1,8 +1,10 @@
 """Split a run of pinyin letters into syllables.
 
 Exhaustive search with memoisation (inputs are short — the preedit is a handful
-of syllables), then a deterministic ranking. An unfinished trailing syllable is
-kept as ``partial`` so candidates can be looked up while you are still typing.
+of syllables), then a deterministic ranking. Enumeration is exhaustive up to the
+_MAX_SPLITS cap; pathological all-ambiguous input is truncated gracefully.
+An unfinished trailing syllable is kept as ``partial`` so candidates can be
+looked up while you are still typing.
 """
 
 from __future__ import annotations
@@ -45,12 +47,7 @@ def _all_splits(text: str) -> tuple[tuple[str, ...], ...]:
         if not is_syllable(head):
             continue
         for rest in _all_splits(text[size:]):
-            candidate = (head, *rest)
-            # Don't enumerate splits that end with interjection syllables,
-            # unless it's the only remaining character (complete input edge case).
-            if candidate and candidate[-1] in _INTERJECTION_ONLY and text[size:]:
-                continue
-            out.append(candidate)
+            out.append((head, *rest))
             if len(out) >= _MAX_SPLITS:
                 return tuple(out)
     return tuple(out)
