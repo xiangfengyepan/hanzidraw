@@ -59,3 +59,20 @@ def test_per_initial_cap_limits_each_pinyin_initial(tmp_path):
 def test_selection_is_deduplicated(tmp_path):
     entries = select(_store(tmp_path), must="沣沣")
     assert len([e for e in entries if chr(e.codepoint) == "沣"]) == 1
+
+
+def test_select_emits_the_primary_reading_not_an_earlier_alternate(tmp_path):
+    """The exporter must not silently promote a CC-CEDICT alternate over the primary.
+
+    "lao" sorts before "le" alphabetically, but "le" is 乐's primary reading;
+    the exported Entry must carry "le". Reached through the non-must path
+    (all_chars_by_rank), which is the one Task 19's original first_reading-only
+    fix would have missed.
+    """
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("乐"), freq_rank=50, nstroke=2, medians=MEDIANS, outline=None)
+    store.add_reading("le", ord("乐"), is_primary=True)
+    store.add_reading("lao", ord("乐"), is_primary=False)
+    store.finish()
+    entries = select(store, must="")
+    assert entries[0].pinyin == "le"

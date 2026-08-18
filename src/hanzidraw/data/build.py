@@ -108,7 +108,7 @@ def build(
         ranks[row.char] = row.freq_rank
         report.chars += 1
         for reading in row.readings:
-            store.add_reading(reading, codepoint)
+            store.add_reading(reading, codepoint, is_primary=True)
             report.readings += 1
             seen_readings.add((reading, codepoint))
 
@@ -152,7 +152,7 @@ def build(
         if pair in seen_readings:
             continue  # rule 2: never duplicate a (pinyin, codepoint) pair
         seen_readings.add(pair)
-        store.add_reading(reading, codepoint)
+        store.add_reading(reading, codepoint, is_primary=False)
         report.readings += 1
         report.extra_readings += 1
 

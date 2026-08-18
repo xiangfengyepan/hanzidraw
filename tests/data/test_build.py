@@ -138,6 +138,33 @@ def test_build_harvests_extra_readings_only_for_stored_characters(tmp_path, fixt
     assert report.extra_readings == 1
 
 
+def test_build_marks_hanzidb_readings_primary_and_harvested_readings_not(tmp_path, fixtures):
+    """hanziDB's reading is provenance-marked primary; a CC-CEDICT harvest is not.
+
+    乐 gets hanziDB reading "le" (primary) and CC-CEDICT harvests "lao" as a
+    genuine alternate. Alphabetically "lao" sorts before "le", so this only
+    passes if first_reading is deciding by provenance, not by sorting.
+    """
+    raw = _raw(tmp_path, fixtures)
+    with (raw / "graphics.txt").open("a", encoding="utf-8") as fh:
+        fh.write(
+            '\n{"character":"乐","strokes":["M 0 0 Z"],'
+            '"medians":[[[100,600],[900,600]],[[512,700],[512,200]]]}\n'
+        )
+    with (raw / "hanziDB.csv").open("a", encoding="utf-8") as fh:
+        fh.write("5,乐,lè,happy,丿,4.0,5,1,5,300\n")
+    with gzip.open(raw / "cedict.txt.gz", "rt", encoding="utf-8") as fh:
+        existing = fh.read()
+    extra = (fixtures / "cedict_chars_sample.u8").read_text(encoding="utf-8")
+    with gzip.open(raw / "cedict.txt.gz", "wt", encoding="utf-8") as fh:
+        fh.write(existing + "\n" + extra)
+
+    db = tmp_path / "db.sqlite"
+    build(raw, db)
+    store = Store.open(db)
+    assert store.first_reading(ord("乐")) == "le"
+
+
 def test_build_does_not_duplicate_a_reading_it_already_has(tmp_path, fixtures):
     raw = _raw(tmp_path, fixtures)
     with gzip.open(raw / "cedict.txt.gz", "rt", encoding="utf-8") as fh:

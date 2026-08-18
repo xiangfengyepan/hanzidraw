@@ -12,7 +12,7 @@ import zlib
 from collections.abc import Iterator
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS char (
@@ -21,8 +21,9 @@ CREATE TABLE IF NOT EXISTS char (
     nstroke   INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS reading (
-    pinyin    TEXT NOT NULL,
-    codepoint INTEGER NOT NULL
+    pinyin     TEXT NOT NULL,
+    codepoint  INTEGER NOT NULL,
+    is_primary INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS phrase (
     pinyin_key TEXT NOT NULL,
@@ -135,9 +136,10 @@ class Store:
             (codepoint, encode_medians(medians), blob),
         )
 
-    def add_reading(self, pinyin: str, codepoint: int) -> None:
+    def add_reading(self, pinyin: str, codepoint: int, *, is_primary: bool = False) -> None:
         self._conn.execute(
-            "INSERT INTO reading (pinyin, codepoint) VALUES (?, ?)", (pinyin, codepoint)
+            "INSERT INTO reading (pinyin, codepoint, is_primary) VALUES (?, ?, ?)",
+            (pinyin, codepoint, int(is_primary)),
         )
 
     def add_phrase(self, pinyin_key: str, text: str, weight: float) -> None:
@@ -232,15 +234,24 @@ class Store:
         return (int(row[0]), int(row[1]))
 
     def first_reading(self, codepoint: int) -> str | None:
+        """The character's preferred reading: primary provenance first, else any.
+
+        "Primary" means a reading hanziDB itself gave the character, as opposed
+        to a heteronym alternate harvested from CC-CEDICT (see build.py). Falls
+        back to alphabetical order only among readings of the same provenance,
+        so the result is deterministic either way.
+        """
         row = self._conn.execute(
-            "SELECT pinyin FROM reading WHERE codepoint = ? ORDER BY pinyin LIMIT 1", (codepoint,)
+            "SELECT pinyin FROM reading WHERE codepoint = ? "
+            "ORDER BY is_primary DESC, pinyin LIMIT 1",
+            (codepoint,),
         ).fetchone()
         return str(row[0]) if row else None
 
     def all_chars_by_rank(self) -> Iterator[tuple[int, str, int]]:
         cur = self._conn.execute(
             "SELECT c.codepoint, (SELECT r.pinyin FROM reading r "
-            "WHERE r.codepoint = c.codepoint ORDER BY r.pinyin LIMIT 1), "
+            "WHERE r.codepoint = c.codepoint ORDER BY r.is_primary DESC, r.pinyin LIMIT 1), "
             "c.freq_rank FROM char c JOIN geom g ON g.codepoint = c.codepoint "
             "ORDER BY c.freq_rank"
         )

@@ -101,6 +101,36 @@ def test_open_rejects_the_old_schema_version_1(tmp_path):
     assert "--rebuild" in str(exc.value)
 
 
+def test_open_rejects_the_old_schema_version_2(tmp_path):
+    """A real pre-Task-19-fix database (schema_version 2, no reading provenance) is rejected."""
+    path = tmp_path / "db.sqlite"
+    store = _build(path)
+    store.set_meta("schema_version", "2")
+    store.finish()
+    store.close()
+    with pytest.raises(StoreError) as exc:
+        Store.open(path)
+    assert "--rebuild" in str(exc.value)
+
+
+def test_first_reading_prefers_the_primary_reading_over_an_earlier_alternate(tmp_path):
+    """Alphabetical order must not override provenance: 'xie' < 'ye', but 'ye' is primary."""
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("叶"), freq_rank=1, nstroke=5, medians=MEDIANS, outline=None)
+    store.add_reading("ye", ord("叶"), is_primary=True)
+    store.add_reading("xie", ord("叶"), is_primary=False)
+    store.finish()
+    assert store.first_reading(ord("叶")) == "ye"
+
+
+def test_first_reading_falls_back_to_any_reading_when_none_is_primary(tmp_path):
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("叶"), freq_rank=1, nstroke=5, medians=MEDIANS, outline=None)
+    store.add_reading("xie", ord("叶"), is_primary=False)
+    store.finish()
+    assert store.first_reading(ord("叶")) == "xie"
+
+
 def test_phrases_for_syllable_and_partial_prefix_both_dedupe_by_text(tmp_path):
     """Same phrase text under two different continuations dedupes for both methods."""
     store = Store.create(tmp_path / "db_dup.sqlite")
