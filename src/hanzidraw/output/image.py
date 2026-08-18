@@ -32,6 +32,17 @@ class SvgBackend:
     def end_glyph(self) -> None:
         self._parts.append("</g>")
 
+    def outline(self, paths: Sequence[str], ox: float, oy: float, size: float) -> None:
+        """Emit the typographic contour as a filled path (no parsing needed)."""
+        from ..render.svgpath import svg_transform  # noqa: PLC0415
+
+        transform = svg_transform(ox, oy, size)
+        for raw in paths:
+            self._parts.append(
+                f'<path d="{raw}" transform="{transform}" '
+                f'fill="{self.style.color}" stroke="none" />'
+            )
+
     def to_svg(self) -> str:
         head = (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.width}" '

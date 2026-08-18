@@ -13,9 +13,13 @@ class CanvasBackend:
         self._text = text
         self._strokes: list[tuple[Point, ...]] = []
         self._box = (0.0, 0.0, 0.0)
+        self._outline: tuple[str, ...] | None = None
 
     def set_text(self, text: str) -> None:
         self._text = text
+
+    def set_outline(self, outline: tuple[str, ...] | None) -> None:
+        self._outline = outline
 
     def begin_glyph(self, ox: float, oy: float, size: float) -> None:
         self._strokes = []
@@ -26,5 +30,8 @@ class CanvasBackend:
 
     def end_glyph(self) -> None:
         ox, oy, size = self._box
-        self._view.commit(Glyph(tuple(self._strokes)), self._text, ox, oy, size)
+        self._view.commit(
+            Glyph(tuple(self._strokes)), self._text, ox, oy, size, outline=self._outline
+        )
         self._strokes = []
+        self._outline = None

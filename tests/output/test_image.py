@@ -43,3 +43,10 @@ def test_save_writes_the_file(tmp_path):
     out = tmp_path / "a.svg"
     backend.save(out)
     assert out.read_text(encoding="utf-8").startswith("<svg")
+
+
+def test_svg_outline_emits_a_filled_path_with_the_em_transform():
+    backend = SvgBackend(200, 200, "#fff", Style("#000", 8.0))
+    backend.outline(("M 100 500 L 900 500 Z",), 0.0, 0.0, 200.0)
+    svg = backend.to_svg()
+    assert "<path" in svg and "translate(0,0)" in svg and 'fill="#000"' in svg

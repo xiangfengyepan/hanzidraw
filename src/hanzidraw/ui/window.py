@@ -223,6 +223,8 @@ class MainWindow(QMainWindow):
                 placed = self.canvas.sheet.add(load_glyph(self._store, codepoint), chr(codepoint))
                 if isinstance(backend, CanvasBackend):
                     backend.set_text(placed.text)
+                    if str(self._cfg.get("glyph.style")) == "outline":
+                        backend.set_outline(self._store.outline(codepoint))
                 try:
                     draw_glyph(backend, placed.glyph, placed.ox, placed.oy, placed.size)
                 except MouseAbort as exc:

@@ -26,10 +26,16 @@ class CanvasView(QWidget):
         self._cfg = None
         self._mode = "sheet"
         self._sheet = Sheet(columns=6, advance=1.15, size=240.0)
-        self._done: list[tuple[Glyph, str]] = []
+        # The third element is the archived glyph's outline contour, already
+        # placed into pixel space at commit time (see commit()): once a
+        # glyph is done it no longer has a live cell box to place a raw
+        # outline with, so the QPainterPath is baked in while the box is
+        # still known, rather than trying to keep box-per-entry around.
+        self._done: list[tuple[Glyph, str, QPainterPath | None]] = []
         self._current: Glyph | None = None
         self._current_text = ""
         self._current_box = (0.0, 0.0, 0.0)
+        self._current_outline: tuple[str, ...] | None = None
         self._timeline: Timeline | None = None
         self._started = 0.0
         self._frozen_strokes: int | None = None
@@ -95,17 +101,33 @@ class CanvasView(QWidget):
 
     # ---- content ----
 
-    def commit(self, glyph: Glyph, text: str, ox: float, oy: float, size: float) -> None:
+    def commit(
+        self,
+        glyph: Glyph,
+        text: str,
+        ox: float,
+        oy: float,
+        size: float,
+        outline: tuple[str, ...] | None = None,
+    ) -> None:
         # Task 20's outline painter needs the cell box to place the typographic
         # contour, so it is kept rather than discarded even though the pixel
-        # geometry pushed here is already baked into `glyph`.
-        self._current_box = (ox, oy, size)
+        # geometry pushed here is already baked into `glyph`. The outgoing
+        # current's contour is placed *before* the box is overwritten below --
+        # once overwritten, the old glyph's cell position is gone for good.
         if self._current is not None:
-            self._done.append((self._current, self._current_text))
+            done_contour = (
+                self._outline_path(self._current_outline, *self._current_box)
+                if self._current_outline
+                else None
+            )
+            self._done.append((self._current, self._current_text, done_contour))
+        self._current_box = (ox, oy, size)
         if self._mode == "single":
             self._done.clear()
         self._current = glyph
         self._current_text = text
+        self._current_outline = outline
         self._frozen_strokes = None
         animated = self._cfg is None or bool(self._cfg.get("glyph.animation.enabled"))
         if animated:
@@ -196,6 +218,39 @@ class CanvasView(QWidget):
                 path.lineTo(QPointF(*point))
         return path
 
+    def _outline_path(self, outline, ox, oy, size) -> QPainterPath:
+        from ..render.svgpath import outline_to_box, parse_path  # noqa: PLC0415
+
+        path = QPainterPath()
+        for raw in outline:
+            for seg in parse_path(raw):
+                placed = outline_to_box(seg, ox, oy, size)
+                if seg.kind == "M":
+                    path.moveTo(QPointF(*placed.points[0]))
+                elif seg.kind == "L":
+                    path.lineTo(QPointF(*placed.points[0]))
+                elif seg.kind == "Q":
+                    path.quadTo(QPointF(*placed.points[0]), QPointF(*placed.points[1]))
+                elif seg.kind == "C":
+                    path.cubicTo(
+                        QPointF(*placed.points[0]),
+                        QPointF(*placed.points[1]),
+                        QPointF(*placed.points[2]),
+                    )
+                elif seg.kind == "Z":
+                    path.closeSubpath()
+        return path
+
+    def _paint_outline(self, painter, glyph, outline, box, color) -> None:
+        """Fill the contour progressively: clip to it, then sweep along the median."""
+        ox, oy, size = box
+        contour = self._outline_path(outline, ox, oy, size)
+        painter.save()
+        painter.setClipPath(contour)
+        painter.setPen(self._pen(color, size))  # a pen as wide as the glyph fills the clip
+        painter.drawPath(self._path(glyph.strokes))
+        painter.restore()
+
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt naming
         del event
         cfg = self._cfg
@@ -205,6 +260,7 @@ class CanvasView(QWidget):
         width = float(cfg.get("glyph.stroke_width_px")) if cfg else 14.0
         grid_kind = str(cfg.get("canvas.grid")) if cfg else "none"
         grid_color = str(cfg.get("canvas.grid_color")) if cfg else "#e5ded0"
+        style = str(cfg.get("glyph.style")) if cfg else "brush"
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -220,9 +276,23 @@ class CanvasView(QWidget):
             painter.drawPath(self._path(self._current.strokes))
 
         painter.setPen(self._pen(color, width))
-        for glyph, _text in self._done:
-            painter.drawPath(self._path(glyph.strokes))
+        for glyph, _text, contour in self._done:
+            # A finished glyph is 100% revealed, so filling its whole
+            # already-placed contour is exactly what the progressive
+            # clip-and-sweep in _paint_outline would converge to.
+            if style == "outline" and contour is not None:
+                painter.fillPath(contour, QColor(color))
+            else:
+                painter.drawPath(self._path(glyph.strokes))
+
         visible = self._visible_current()
         if visible is not None:
-            painter.drawPath(self._path(visible.strokes))
+            if style == "outline" and self._current_outline:
+                painter.setPen(self._pen(ghost, width))
+                painter.drawPath(self._outline_path(self._current_outline, *self._current_box))
+                self._paint_outline(
+                    painter, visible, self._current_outline, self._current_box, color
+                )
+            else:
+                painter.drawPath(self._path(visible.strokes))
         painter.end()
