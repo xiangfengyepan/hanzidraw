@@ -46,18 +46,32 @@ def parse_graphics_line(line: str) -> GlyphRecord | None:
         obj = json.loads(line)
     except json.JSONDecodeError:
         return None
-    char = obj.get("character")
-    medians = obj.get("medians") or []
-    if not char or not medians:
+    try:
+        if not isinstance(obj, dict):
+            return None
+        char = obj.get("character")
+        medians = obj.get("medians") or []
+        if not char or not medians:
+            return None
+        strokes: list[tuple[tuple[int, int], ...]] = []
+        for stroke in medians:
+            points = []
+            for p in stroke:
+                if len(p) < 2:
+                    return None
+                x = int(p[0])
+                y = int(p[1])
+                points.append(to_em(x, y))
+            if not points:
+                return None
+            strokes.append(tuple(points))
+        if not strokes:
+            return None
+        return GlyphRecord(
+            char=char, medians=tuple(strokes), outline=tuple(obj.get("strokes") or ())
+        )
+    except (AttributeError, TypeError, ValueError, KeyError, IndexError):
         return None
-    strokes: list[tuple[tuple[int, int], ...]] = []
-    for stroke in medians:
-        points = tuple(to_em(int(p[0]), int(p[1])) for p in stroke if len(p) >= 2)
-        if points:
-            strokes.append(points)
-    if not strokes:
-        return None
-    return GlyphRecord(char=char, medians=tuple(strokes), outline=tuple(obj.get("strokes") or ()))
 
 
 @dataclass(frozen=True)

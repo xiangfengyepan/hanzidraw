@@ -32,6 +32,32 @@ def test_parse_graphics_line_skips_entries_without_medians(fixtures):
     assert parse_graphics_line("") is None
 
 
+def test_parse_graphics_line_rejects_valid_json_that_isnt_a_dict():
+    assert parse_graphics_line("[1,2,3]") is None
+    assert parse_graphics_line("42") is None
+    assert parse_graphics_line('"str"') is None
+    assert parse_graphics_line("null") is None
+
+
+def test_parse_graphics_line_rejects_non_numeric_coordinates():
+    assert (
+        parse_graphics_line('{"character":"十","strokes":[],"medians":[[["x","y"],[1,2]]]}') is None
+    )
+
+
+def test_parse_graphics_line_rejects_coordinates_with_too_few_values():
+    assert parse_graphics_line('{"character":"十","strokes":[],"medians":[[[1],[2,3]]]}') is None
+
+
+def test_parse_graphics_line_rejects_entry_with_any_unparseable_stroke():
+    assert (
+        parse_graphics_line(
+            '{"character":"十","strokes":[],"medians":[[[100,500],[900,500]],[[1,2],["x","y"]]]}'
+        )
+        is None
+    )
+
+
 def test_parse_hanzidb_reads_readings_rank_and_strokes(fixtures):
     rows = parse_hanzidb((fixtures / "hanzidb_sample.csv").read_text(encoding="utf-8"))
     by_char = {r.char: r for r in rows}
