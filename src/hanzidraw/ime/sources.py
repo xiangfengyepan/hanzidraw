@@ -15,7 +15,10 @@ class Candidate:
     codepoints: tuple[int, ...]
     source: str
     weight: float
-    consumed: int
+    consumed: int  # How many syllables this candidate eats. May exceed the
+    # segmentation's syllable count when a reading resegments (e.g.,
+    # segment("xian") is 1 syllable but 西安 is 2 characters). Consumers
+    # must slice with it, never index or assert on it.
 
 
 class CandidateSource(Protocol):
@@ -29,6 +32,8 @@ class CharSource:
         self._store = store
 
     def lookup(self, seg: Segmentation, limit: int) -> list[Candidate]:
+        if limit <= 0:
+            return []
         if seg.syllables:
             rows = self._store.chars_for_reading(seg.syllables[0], limit)
         elif seg.partial:
@@ -61,14 +66,23 @@ class PhraseSource:
 
     def lookup(self, seg: Segmentation, limit: int) -> list[Candidate]:
         key = seg.key + seg.partial
-        if not key:
+        if not key or limit <= 0:
             return []
-        rows = self._store.phrases_for_key(key, limit)
-        exact = {text for text, _ in rows}
-        if len(rows) < limit:
-            for text, weight in self._store.phrases_for_prefix(key, limit - len(rows)):
-                if text not in exact:
-                    rows.append((text, weight))
+        exact_rows = self._store.phrases_for_key(key, limit)
+        exact = {text for text, _ in exact_rows}
+        rows: list[tuple[str, float]] = list(exact_rows)
+        seen = set(exact)
+        # The prefix range includes `key` itself, so the exact rows come back
+        # first; ask for headroom and filter rather than topping up by the
+        # shortfall, which those rows would consume entirely. Measured maximum
+        # real phrase weight is ~665,000 (就是), about 1,505× below the bonus.
+        for text, weight in self._store.phrases_for_prefix(key, limit + len(exact_rows)):
+            if len(rows) >= limit:
+                break
+            if text in seen:
+                continue
+            seen.add(text)
+            rows.append((text, weight))
         out: list[Candidate] = []
         for text, weight in rows:
             out.append(

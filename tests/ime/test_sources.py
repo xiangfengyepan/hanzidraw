@@ -53,3 +53,63 @@ def test_phrase_source_returns_nothing_for_a_key_it_does_not_have(tmp_path):
 def test_char_weights_decrease_with_frequency_rank(tmp_path):
     cands = CharSource(_store(tmp_path)).lookup(segment("bei")[0], limit=10)
     assert cands[0].weight > cands[1].weight
+
+
+def test_phrase_source_deduplicates_prefix_vs_prefix_duplicates(tmp_path):
+    """Prefix-vs-prefix duplicates are deduped (mirroring cedu/ceduo -> 测度)."""
+    store = Store.create(tmp_path / "db_dup.sqlite")
+    # Add two phrases with the same text but different keys
+    store.add_phrase("cedu", "测度", 100.0)
+    store.add_phrase("ceduo", "测度", 90.0)
+    store.finish()
+    src = PhraseSource(store)
+    cands = src.lookup(segment("ce")[0], limit=5000)
+    texts = [c.text for c in cands]
+    # 测度 should appear exactly once, not twice
+    assert texts.count("测度") == 1
+
+
+def test_phrase_source_honours_limit_when_distinct_candidates_exist(tmp_path):
+    """limit is honoured even when exact rows eat into the budget."""
+    store = Store.create(tmp_path / "db_limit.sqlite")
+    # One exact-key phrase and one longer-key prefix phrase
+    store.add_phrase("beijing", "北京", 5000.0)
+    store.add_phrase("beijingren", "北京人", 100.0)
+    store.finish()
+    src = PhraseSource(store)
+    # At limit=2, we should get exactly 2 candidates (not under-filled)
+    cands = src.lookup(segment("beijing")[0], limit=2)
+    assert len(cands) == 2
+    # Both should be present
+    assert [c.text for c in cands] == ["北京", "北京人"]
+
+
+def test_char_source_returns_empty_for_zero_and_negative_limits(tmp_path):
+    """limit=0 and limit=-1 return [] to avoid SQLite footgun."""
+    src = CharSource(_store(tmp_path))
+    assert src.lookup(segment("bei")[0], limit=0) == []
+    assert src.lookup(segment("bei")[0], limit=-1) == []
+
+
+def test_phrase_source_returns_empty_for_zero_and_negative_limits(tmp_path):
+    """limit=0 and limit=-1 return [] to avoid SQLite footgun."""
+    src = PhraseSource(_store(tmp_path))
+    assert src.lookup(segment("beijing")[0], limit=0) == []
+    assert src.lookup(segment("beijing")[0], limit=-1) == []
+
+
+def test_consumed_can_exceed_segmentation_syllables_on_resegmentation(tmp_path):
+    """consumed > seg.syllables when reading resegments."""
+    store = Store.create(tmp_path / "db_reseg.sqlite")
+    # A two-character phrase keyed by a single-syllable reading
+    store.add_phrase("xian", "西安", 1000.0)
+    store.finish()
+    src = PhraseSource(store)
+    # segment("xian") is 1 syllable
+    seg = segment("xian")[0]
+    assert len(seg.syllables) == 1
+    cands = src.lookup(seg, limit=10)
+    # But the phrase 西安 is 2 characters
+    assert len(cands) == 1
+    assert cands[0].consumed == 2
+    # Consumer must slice, not index/assert on this
