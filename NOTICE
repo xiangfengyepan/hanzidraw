@@ -1,0 +1,18 @@
+hanzidraw bundles no third-party data. At first run it downloads the following
+open datasets into the user data directory:
+
+Make Me a Hanzi — stroke medians and outlines
+  https://github.com/skishore/makemeahanzi
+  Derived from Arphic Technology's AR PL UMing and AR PL UKai fonts, used under
+  the Arphic Public License; the project's own code and derived data are under
+  the LGPL. Attribution retained per those licences.
+
+hanziDB — character frequency ranks, pinyin readings, stroke counts
+  https://github.com/ruddfawcett/hanziDB.csv
+
+CC-CEDICT — Chinese-English dictionary, used here for word/phrase pinyin keys
+  https://www.mdbg.net/chinese/dictionary?page=cc-cedict
+  Licensed CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
+
+rime-essay (optional) — word frequency table used to rank phrase candidates
+  https://github.com/rime/rime-essay
