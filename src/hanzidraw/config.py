@@ -192,19 +192,37 @@ def load_config(path: Path | None = None) -> Config:
     if path.exists():
         try:
             user = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+        except (tomllib.TOMLDecodeError, UnicodeDecodeError, OSError) as exc:
             errors.append(f"{path}: could not be parsed ({exc}); using defaults")
             user = {}
 
+    # Check for unknown keys and validate structure
     user_keys = {k for k, _ in _walk(user)}
+    known_keys = {k for k, _ in _walk(DEFAULTS)}
+    filtered_user: dict[str, Any] = {}
+
     for key in sorted(user_keys):
-        try:
-            _dig(DEFAULTS, key)
-        except KeyError:
+        if key not in known_keys:
             warnings.append(f"{key}: unknown setting, ignored")
 
-    preset_name = user.get("theme", {}).get("preset", DEFAULTS["theme"]["preset"])
+    # Validate structure: top-level keys that should be dicts must be dicts
+    for key in DEFAULTS:
+        if key in user and not isinstance(user[key], dict) and isinstance(DEFAULTS[key], dict):
+            errors.append(
+                f"{key}: expected a section ([{key}]), got a scalar value; using defaults"
+            )
+        elif key in user and isinstance(user[key], dict) and isinstance(DEFAULTS[key], dict):
+            # Filter sub-keys: only keep known ones
+            filtered_user[key] = {k: v for k, v in user[key].items() if f"{key}.{k}" in known_keys}
+        elif key in user and key in known_keys:
+            filtered_user[key] = user[key]
+
+    # Get preset, validating that theme is a dict
+    preset_name = DEFAULTS["theme"]["preset"]
+    if "theme" in filtered_user:
+        preset_name = filtered_user["theme"].get("preset", preset_name)
+
     preset = PRESETS.get(preset_name, {})
-    merged = _deep_merge(_deep_merge(DEFAULTS, preset), user)
+    merged = _deep_merge(_deep_merge(DEFAULTS, preset), filtered_user)
     errors += _validate(merged)
     return Config(data=merged, errors=tuple(errors), warnings=tuple(warnings), path=path)

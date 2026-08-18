@@ -44,6 +44,12 @@ def test_unknown_key_is_a_warning_and_is_kept_readable(tmp_path):
     cfg = load_config(p)
     assert cfg.errors == ()
     assert any("glyph.colour" in w for w in cfg.warnings)
+    # Unknown key should not be in the data
+    try:
+        cfg.get("glyph.colour")
+        raise AssertionError("expected KeyError for unknown key glyph.colour")
+    except KeyError:
+        pass
 
 
 def test_malformed_toml_reports_one_error_and_uses_defaults(tmp_path):
@@ -61,3 +67,44 @@ def test_get_rejects_a_key_that_is_not_in_the_schema():
     except KeyError:
         return
     raise AssertionError("expected KeyError for an unknown dotted key")
+
+
+def test_scalar_value_where_table_is_expected_degrades_gracefully(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('theme = "foo"\n', encoding="utf-8")
+    cfg = load_config(p)
+    # Should use defaults for theme, not crash
+    assert cfg.get("theme.preset") == DEFAULTS["theme"]["preset"]
+    # Should record an error about the structure problem
+    assert len(cfg.errors) == 1
+    assert "theme" in cfg.errors[0]
+    assert "section" in cfg.errors[0]
+
+
+def test_scalar_at_top_level_table_key_degrades_gracefully(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('glyph = "foo"\n', encoding="utf-8")
+    cfg = load_config(p)
+    # Should use defaults for glyph, not crash
+    assert cfg.get("glyph.style") == DEFAULTS["glyph"]["style"]
+    # Should record an error about the structure problem
+    assert len(cfg.errors) == 1
+    assert "glyph" in cfg.errors[0]
+    assert "section" in cfg.errors[0]
+
+
+def test_unreadable_file_degrades_gracefully(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text("valid = true\n", encoding="utf-8")
+    # Make it unreadable (if we have permissions)
+    try:
+        p.chmod(0o000)
+        cfg = load_config(p)
+        # Should fall back to defaults
+        assert cfg.get("glyph.style") == DEFAULTS["glyph"]["style"]
+        # Should record an error
+        assert len(cfg.errors) == 1
+        assert "could not be parsed" in cfg.errors[0]
+    finally:
+        # Restore permissions for cleanup
+        p.chmod(0o644)
