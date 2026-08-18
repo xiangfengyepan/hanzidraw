@@ -58,3 +58,21 @@ def test_fetch_all_fails_loudly_on_a_missing_required_source(tmp_path):
     with pytest.raises(FetchError) as exc:
         fetch_all(tmp_path / "raw", sources=sources)
     assert "required" in str(exc.value)
+
+
+def test_download_raises_fetch_error_for_empty_url(tmp_path):
+    with pytest.raises(FetchError) as exc:
+        download("", tmp_path / "o.txt")
+    assert "" in str(exc.value)
+
+
+def test_download_raises_fetch_error_for_no_scheme_url(tmp_path):
+    with pytest.raises(FetchError) as exc:
+        download("no-scheme-here", tmp_path / "o.txt")
+    assert "no-scheme-here" in str(exc.value)
+
+
+def test_download_raises_fetch_error_for_whitespace_url(tmp_path):
+    with pytest.raises(FetchError) as exc:
+        download(" ", tmp_path / "o.txt")
+    assert " " in str(exc.value)

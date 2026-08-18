@@ -28,9 +28,9 @@ def download(
     headers = dict(_UA)
     if have and url.startswith("http"):
         headers["Range"] = f"bytes={have}-"
-    request = urllib.request.Request(url, headers=headers)  # noqa: S310
 
     try:
+        request = urllib.request.Request(url, headers=headers)  # noqa: S310
         with urllib.request.urlopen(request) as response:  # noqa: S310
             resumed = response.status == 206 if hasattr(response, "status") else False
             if not resumed:
