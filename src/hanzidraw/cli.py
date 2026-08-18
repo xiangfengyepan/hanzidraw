@@ -129,6 +129,43 @@ def _cmd_draw(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_export_firmware(args: argparse.Namespace) -> int:
+    from .data.store import Store, StoreError
+    from .firmware.emit_c import emit_c, emit_h
+    from .firmware.subset import select
+
+    try:
+        store = Store.open(Path(args.db) if args.db else db_path())
+    except StoreError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    budget = int(args.budget_kb * 1024) if args.budget_kb else None
+    entries = select(
+        store,
+        must=args.must or "",
+        budget_bytes=budget,
+        per_initial=args.per_initial,
+        limit=args.limit,
+    )
+    if not entries:
+        print("nothing selected; check --must and --budget-kb", file=sys.stderr)
+        return 1
+
+    out = Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(emit_c(entries), encoding="utf-8")
+    if args.header:
+        Path(args.header).write_text(emit_h(entries), encoding="utf-8")
+
+    total = sum(e.cost_bytes for e in entries)
+    print(f"{len(entries)} characters, {total / 1024:.1f} KB")
+    if budget:
+        print(f"budget {budget / 1024:.1f} KB, headroom {(budget - total) / 1024:.1f} KB")
+    print(f"wrote {out}")
+    return 0
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     try:
         from .ui.app import run
@@ -165,6 +202,16 @@ def main(argv: list[str] | None = None) -> int:
     draw.add_argument("--config", default=None)
     draw.add_argument("--db", default=None)
     draw.set_defaults(func=_cmd_draw)
+
+    exp = sub.add_parser("export-firmware", help="emit hanzi_data.c for the Keychron firmware")
+    exp.add_argument("-o", "--output", required=True)
+    exp.add_argument("--header", default=None, help="also write hanzi_data.h here")
+    exp.add_argument("--must", default="", help="characters to include first, e.g. 沣潘叶祥")
+    exp.add_argument("--budget-kb", type=float, default=None)
+    exp.add_argument("--per-initial", type=int, default=None)
+    exp.add_argument("--limit", type=int, default=None)
+    exp.add_argument("--db", default=None)
+    exp.set_defaults(func=_cmd_export_firmware)
 
     gui = sub.add_parser("run", help="open the drawing window (default)")
     gui.add_argument("--config", default=None)

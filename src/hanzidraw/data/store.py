@@ -231,6 +231,12 @@ class Store:
             raise StoreError(f"no metadata for U+{codepoint:04X}")
         return (int(row[0]), int(row[1]))
 
+    def first_reading(self, codepoint: int) -> str | None:
+        row = self._conn.execute(
+            "SELECT pinyin FROM reading WHERE codepoint = ? ORDER BY pinyin LIMIT 1", (codepoint,)
+        ).fetchone()
+        return str(row[0]) if row else None
+
     def all_chars_by_rank(self) -> Iterator[tuple[int, str, int]]:
         cur = self._conn.execute(
             "SELECT c.codepoint, (SELECT r.pinyin FROM reading r "
