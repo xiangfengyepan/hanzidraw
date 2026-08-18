@@ -52,3 +52,40 @@ def test_brush_and_outline_styles_render_differently(qtbot, tmp_path):
         return bytes(image.constBits())
 
     assert render("brush") != render("outline")
+
+
+BAD_OUTLINE = ("M 0 0 A 1 1 0 0 1 10 10",)  # an elliptical arc: unsupported, and it says so
+
+
+def test_unparseable_outline_data_falls_back_to_the_brush_with_a_message(qtbot, view):
+    # A paintEvent has nowhere to put a status message and an exception there
+    # leaves the QPainter unended, so the outline is parsed once at commit time.
+    messages = []
+    view.outline_failed.connect(messages.append)
+
+    view.commit(GLYPH, "十", 0.0, 0.0, 100.0, outline=BAD_OUTLINE)
+
+    assert len(messages) == 1
+    assert "十" in messages[0]
+    assert view.grab().toImage().width() == view.width()  # still painted, no exception
+    assert view.glyph_count == 1
+
+
+def test_a_good_outline_is_parsed_once_at_commit_time_not_per_frame(qtbot, view, monkeypatch):
+    from hanzidraw.render import svgpath
+
+    calls = []
+    real = svgpath.parse_path
+
+    def counted(d):
+        calls.append(d)
+        return real(d)
+
+    monkeypatch.setattr(svgpath, "parse_path", counted)
+    view.commit(GLYPH, "十", 0.0, 0.0, 100.0, outline=OUTLINE)
+    after_commit = len(calls)
+    view.grab()
+    view.grab()
+
+    assert after_commit == 1
+    assert len(calls) == after_commit  # painting re-uses the parsed contour

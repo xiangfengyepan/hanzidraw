@@ -1,5 +1,6 @@
+from hanzidraw.data.glyphs import load_glyph
 from hanzidraw.data.store import Store
-from hanzidraw.output.base import draw_glyph, load_glyph
+from hanzidraw.output.base import draw_glyph
 from hanzidraw.render.glyph import Glyph
 
 

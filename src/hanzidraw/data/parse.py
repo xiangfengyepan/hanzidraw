@@ -53,25 +53,29 @@ def parse_graphics_line(line: str) -> GlyphRecord | None:
         medians = obj.get("medians") or []
         if not char or not medians:
             return None
-        strokes: list[tuple[tuple[int, int], ...]] = []
+        raw: list[tuple[tuple[int, int], ...]] = []
         for stroke in medians:
             points = []
             for p in stroke:
                 if len(p) < 2:
                     return None
-                x = int(p[0])
-                y = int(p[1])
-                points.append(to_em(x, y))
+                points.append((int(p[0]), int(p[1])))
             if not points:
                 return None
-            strokes.append(tuple(points))
-        if not strokes:
+            raw.append(tuple(points))
+        if not raw:
             return None
-        return GlyphRecord(
-            char=char, medians=tuple(strokes), outline=tuple(obj.get("strokes") or ())
-        )
+        outline = tuple(obj.get("strokes") or ())
     except (AttributeError, TypeError, ValueError, KeyError, IndexError):
         return None
+
+    # The coordinate conversion is deliberately *outside* the except above: a
+    # malformed record is "this character has no geometry", but a failure in the
+    # one em-box transform in the build is a bug, and swallowing it here would
+    # hide it as a missing character. (The byte-exact firmware golden test used
+    # to be the backstop for that; it is xfail now, so it no longer is.)
+    strokes = tuple(tuple(to_em(x, y) for x, y in stroke) for stroke in raw)
+    return GlyphRecord(char=char, medians=strokes, outline=outline)
 
 
 @dataclass(frozen=True)

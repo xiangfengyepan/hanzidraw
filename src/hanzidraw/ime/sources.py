@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from ..data.store import Store
 from .segment import Segmentation
+
+# Annotations only. A real import here would pull the database layer (and its
+# driver) into `import hanzidraw.ime.session`, which is meant to be pure stdlib.
+if TYPE_CHECKING:
+    from ..data.store import Store
 
 
 @dataclass(frozen=True)

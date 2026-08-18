@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..data.store import Store
+
+Log = Callable[[str], None]
 
 S = 0.125
 ROW_BYTES = 20  # three pointers + nstroke + padding + the py pointer, on a 32-bit target
@@ -55,7 +58,9 @@ def select(
     budget_bytes: int | None = None,
     per_initial: int | None = None,
     limit: int | None = None,
+    log: Log | None = None,
 ) -> list[Entry]:
+    say = log or (lambda _msg: None)
     chosen: list[Entry] = []
     seen: set[int] = set()
     per_count: dict[str, int] = {}
@@ -73,6 +78,16 @@ def select(
         seen.add(codepoint)
         spent += entry.cost_bytes
         per_count[pinyin[0]] = per_count.get(pinyin[0], 0) + 1
+
+    if budget_bytes is not None and spent > budget_bytes:
+        # Deliberate: required characters win, because they are the whole point
+        # of --must. But it used to happen in silence, and the caller then
+        # printed negative headroom with nothing to explain it.
+        say(
+            f"warning: the {len(chosen)} required characters need {spent} bytes, "
+            f"{spent - budget_bytes} bytes over the {budget_bytes}-byte budget; "
+            f"they are kept anyway, so the headroom below is negative"
+        )
 
     for codepoint, pinyin, _rank in store.all_chars_by_rank():
         if limit is not None and len(chosen) >= limit:

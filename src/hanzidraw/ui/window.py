@@ -9,11 +9,12 @@ from PySide6.QtGui import QCloseEvent, QKeyEvent
 from PySide6.QtWidgets import QMainWindow, QScrollArea, QVBoxLayout, QWidget
 
 from ..config import data_dir, load_config
+from ..data.glyphs import load_glyph
 from ..data.store import Store
 from ..ime.learn import Learn
 from ..ime.session import Key, Session
 from ..ime.sources import CharSource, PhraseSource
-from ..output.base import draw_glyph, load_glyph
+from ..output.base import draw_glyph
 from ..output.canvas import CanvasBackend
 from ..output.mouse import MouseAbort
 from .candidatebar import CandidateBar
@@ -75,6 +76,7 @@ class MainWindow(QMainWindow):
         self.scroll.setWidgetResizable(False)
         self.scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.scroll.setWidget(self.canvas)
+        self.canvas.outline_failed.connect(self.status)
         self.bar = CandidateBar()
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -157,8 +159,7 @@ class MainWindow(QMainWindow):
         if action == "toggle_mode":
             self.canvas.set_mode("single" if self.canvas.mode == "sheet" else "sheet")
         elif action == "undo":
-            self.canvas.undo()
-            self.canvas.sheet.undo()
+            self.canvas.undo()  # owns the sheet's carriage too, like clear()
         elif action == "clear":
             self.canvas.clear()
         elif action == "save":

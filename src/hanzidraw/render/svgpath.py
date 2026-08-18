@@ -16,10 +16,16 @@ OUTLINE_TOP = 900.0
 # an unsupported command (e.g. an arc "A") must still be captured as a token
 # so the validation loop below can reject it by name. Narrowing this back to
 # [MmLlHhVvQqCcZz] would make an unrecognised letter match neither
-# alternative, so finditer would silently skip it like a comma -- its numeric
-# arguments would then be absorbed into the preceding command instead of
-# raising, which is exactly the silent-misparse this module exists to avoid.
+# alternative, and an unmatched character is now an error rather than being
+# skipped -- but it would be the *wrong* error, reported at a stray letter
+# instead of naming the command.
 _TOKEN = re.compile(r"([A-Za-z])|(-?\d*\.?\d+(?:[eE][-+]?\d+)?)")
+# Whitespace and commas are the only separators this data uses; everything else
+# either matches a token or is a mistake. Scanning position by position instead
+# of using finditer is what makes an unmatched character visible: a stray "+"
+# before a coordinate, or the leftover "." of a malformed "5.", used to be
+# silently dropped, and its neighbours then shifted into the wrong arguments.
+_SEPARATOR = re.compile(r"[\s,]+")
 _ARGS = {"M": 2, "L": 2, "H": 1, "V": 1, "Q": 4, "C": 6, "Z": 0}
 
 
@@ -31,9 +37,19 @@ class Seg:
 
 def parse_path(d: str) -> tuple[Seg, ...]:
     tokens: list[str | float] = []
-    for match in _TOKEN.finditer(d or ""):
+    text = d or ""
+    pos = 0
+    while pos < len(text):
+        separator = _SEPARATOR.match(text, pos)
+        if separator:
+            pos = separator.end()
+            continue
+        match = _TOKEN.match(text, pos)
+        if match is None:
+            raise ValueError(f"unexpected character {text[pos]!r} in path data at offset {pos}")
         command, number = match.groups()
         tokens.append(command if command else float(number))
+        pos = match.end()
 
     for token in tokens:
         if isinstance(token, str) and token.upper() not in _ARGS:

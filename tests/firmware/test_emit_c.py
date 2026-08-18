@@ -54,8 +54,8 @@ def test_emitted_header_declares_the_struct_and_max_strokes():
         "rounding-boundary artifact -- it is upstream data drift. The "
         "arithmetic itself (S=0.125 scale-and-round, ex=mx-512, ey=388-my) is "
         "still verified by test_firmware_xy_applies_the_scale_and_reports_"
-        "stroke_lengths. See task-19-report.md for the full per-character "
-        "comparison."
+        "stroke_lengths. See the 'Drift caveat' section of README.md, which "
+        "documents this for the owner rather than hiding it."
     )
 )
 def test_golden_name_characters_reproduce_the_firmware_arrays(fixtures, tmp_path):

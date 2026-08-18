@@ -1,4 +1,4 @@
-"""Where the data comes from, and under what licence."""
+"""Where the data comes from, and who to credit for it."""
 
 from __future__ import annotations
 
@@ -11,7 +11,9 @@ class Source:
     url: str
     filename: str
     required: bool
-    licence: str
+    # An identifier to credit the source by, not licence terms: the full text
+    # lives in NOTICE, which is what the name used to promise and never held.
+    attribution: str
 
 
 SOURCES: tuple[Source, ...] = (
@@ -20,27 +22,27 @@ SOURCES: tuple[Source, ...] = (
         url="https://raw.githubusercontent.com/skishore/makemeahanzi/master/graphics.txt",
         filename="graphics.txt",
         required=True,
-        licence="Arphic Public License / LGPL (Make Me a Hanzi)",
+        attribution="Arphic Public License / LGPL (Make Me a Hanzi)",
     ),
     Source(
         name="hanzidb",
         url="https://raw.githubusercontent.com/ruddfawcett/hanziDB.csv/master/data/hanziDB.csv",
         filename="hanziDB.csv",
         required=True,
-        licence="hanziDB.csv",
+        attribution="hanziDB.csv",
     ),
     Source(
         name="cedict",
         url="https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz",
         filename="cedict.txt.gz",
         required=True,
-        licence="CC BY-SA 4.0 (CC-CEDICT)",
+        attribution="CC BY-SA 4.0 (CC-CEDICT)",
     ),
     Source(
         name="essay",
         url="https://raw.githubusercontent.com/rime/rime-essay/master/essay.txt",
         filename="essay.txt",
         required=False,
-        licence="rime-essay",
+        attribution="rime-essay",
     ),
 )

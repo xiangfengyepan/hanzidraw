@@ -83,3 +83,40 @@ def test_svg_transform_is_a_usable_attribute_value():
     text = svg_transform(10.0, 20.0, 200.0)
     assert "translate(10" in text
     assert "scale(" in text
+
+
+# The tokenizer's own philosophy is that an unmatched character must be visible:
+# anything that is neither a command letter nor a number (whitespace and commas
+# excepted) is rejected, which closes signs, malformed decimals and unsupported
+# commands with one rule instead of three special cases.
+
+
+def test_a_stray_plus_sign_is_rejected_rather_than_dropped():
+    with pytest.raises(ValueError, match=r"\+"):
+        parse_path("M 0 0 L +5 5")
+
+
+def test_a_malformed_decimal_is_rejected_rather_than_dropped():
+    # "5." used to tokenize as 5 with the "." silently discarded.
+    with pytest.raises(ValueError, match=r"\."):
+        parse_path("M 0 0 L 5. 5")
+
+
+def test_a_leading_decimal_point_is_still_a_number():
+    segs = parse_path("M .5 .25 L 1.5 2")
+    assert segs[0] == Seg("M", ((0.5, 0.25),))
+    assert segs[1] == Seg("L", ((1.5, 2.0),))
+
+
+def test_an_exponent_is_still_a_number():
+    assert parse_path("M 1e2 -1.5e-2")[0] == Seg("M", ((100.0, -0.015),))
+
+
+def test_stray_punctuation_is_rejected():
+    with pytest.raises(ValueError, match="!"):
+        parse_path("M 0 0 L 5 5 !")
+
+
+def test_semicolons_and_parens_are_rejected_too():
+    with pytest.raises(ValueError, match=r"\("):
+        parse_path("M 0 0 L (5 5)")

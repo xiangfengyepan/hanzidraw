@@ -83,8 +83,9 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
 
 def _cmd_draw(args: argparse.Namespace) -> int:
     from .config import load_config
+    from .data.glyphs import load_glyph
     from .data.store import Store, StoreError
-    from .output.base import Style, draw_glyph, load_glyph
+    from .output.base import Style, draw_glyph
     from .output.image import SvgBackend, save_png
     from .render.sheet import Sheet
 
@@ -215,6 +216,7 @@ def _cmd_export_firmware(args: argparse.Namespace) -> int:
         budget_bytes=budget,
         per_initial=args.per_initial,
         limit=args.limit,
+        log=print,  # so an over-budget required set explains the negative headroom
     )
     if not entries:
         print("nothing selected; check --must and --budget-kb", file=sys.stderr)

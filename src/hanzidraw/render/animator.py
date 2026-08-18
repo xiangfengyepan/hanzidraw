@@ -58,6 +58,10 @@ class Timeline:
             return (0, 0.0)
         index = int(t_ms // self._step)
         if index >= n:
+            # Unreachable while the t_ms >= total_ms return above stands:
+            # total_ms is n * _step minus one gap, so t_ms // _step < n. Kept
+            # deliberately -- it is what stops a loosened early return from
+            # indexing past the last stroke. Do not "simplify" it away.
             return (n, 1.0)
         within = t_ms - index * self._step
         return (index, max(0.0, min(1.0, within / self.timing.stroke_ms)))

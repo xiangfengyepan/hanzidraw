@@ -10,9 +10,9 @@ def _file_url(path):
     return path.resolve().as_uri()
 
 
-def test_sources_are_declared_with_licences_and_one_optional():
+def test_sources_are_declared_with_attribution_and_one_optional():
     assert {s.name for s in SOURCES} >= {"graphics", "hanzidb", "cedict"}
-    assert all(s.licence for s in SOURCES)
+    assert all(s.attribution for s in SOURCES)
     assert any(not s.required for s in SOURCES)  # rime-essay is optional
 
 

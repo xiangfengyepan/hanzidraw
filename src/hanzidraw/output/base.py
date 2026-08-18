@@ -6,8 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..data.store import Store
-from ..render.glyph import Glyph, Point, glyph_from_em, place
+from ..render.glyph import Glyph, Point, place
 
 
 @dataclass(frozen=True)
@@ -20,10 +19,6 @@ class Backend(Protocol):
     def begin_glyph(self, ox: float, oy: float, size: float) -> None: ...
     def stroke(self, points: Sequence[Point]) -> None: ...
     def end_glyph(self) -> None: ...
-
-
-def load_glyph(store: Store, codepoint: int) -> Glyph:
-    return glyph_from_em(store.medians(codepoint))
 
 
 def draw_glyph(backend: Backend, glyph: Glyph, ox: float, oy: float, size: float) -> None:

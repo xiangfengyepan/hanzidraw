@@ -44,7 +44,8 @@ uv tool install ".[gui,mouse]"    # both
 ```
 
 Without `gui`, `hanzidraw run` prints a clear message and exits rather than
-crashing; without `mouse`, selecting `output.backend = "mouse"` does the same.
+crashing. Without `mouse`, selecting `output.backend = "mouse"` is not fatal:
+the window says so in its status bar and draws to its own canvas instead.
 `hanzidraw draw` and `hanzidraw export-firmware` need neither extra — they
 only need the character database (see below), and `draw -o out.svg` works
 with the base install. `draw -o out.png` needs `gui`, because PNG rasterising
@@ -284,10 +285,13 @@ Three ways for a committed glyph to actually appear, chosen with
 - **`canvas`** (default) — draws into hanzidraw's own window with Qt. Always
   available, supports both `sheet` and `single` canvas modes, undo, replay,
   and the practice grid.
-- **`image`** — headless: writes each committed character (or a whole batch,
-  from the CLI) straight to an SVG or PNG file. This is also the backend the
-  test suite uses to assert on rendered geometry, and what `hanzidraw draw`
-  uses (below).
+- **`image`** — headless: renders a whole batch of characters to one SVG or PNG
+  file. This is what `hanzidraw draw` uses (below), and what the test suite uses
+  to assert on rendered geometry. It is a command-line backend, not a per
+  keystroke one: selecting it while the window is open reports that in the
+  status bar and draws to the canvas, because a window has nowhere sensible to
+  put a file per committed character. Use `Ctrl+S` to export what is on the
+  sheet.
 - **`mouse`** — draws into whatever application currently has focus by moving
   the real pointer, pressing the button for the duration of each stroke, and
   releasing between strokes, mirroring the firmware's own draw engine. Needs

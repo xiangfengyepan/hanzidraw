@@ -71,3 +71,19 @@ def test_timing_from_config_reads_the_animation_table(tmp_path):
     timing = Timing.from_config(load_config(tmp_path / "missing.toml"))
     assert timing.stroke_ms == 380.0
     assert timing.easing == "ease_out"
+
+
+def test_the_index_guard_in_stroke_progress_is_documented_as_unreachable():
+    """The guard is unreachable by construction; this pins why it must stay.
+
+    t_ms >= total_ms returns early, and total_ms is n * (stroke_ms + gap_ms)
+    minus one gap, so t_ms // step can never reach n while the early return
+    stands. Feeding times right up to the boundary must always land on a real
+    stroke index.
+    """
+    timeline = Timeline(Glyph(tuple(((0.0, 0.0), (1.0, 1.0)) for _ in range(4))), Timing())
+    step = timeline.timing.stroke_ms + timeline.timing.gap_ms
+    for t in (0.0, step - 1e-9, step, timeline.total_ms - 1e-9):
+        index, _frac = timeline.stroke_progress(t)
+        assert 0 <= index < 4
+    assert timeline.stroke_progress(timeline.total_ms) == (4, 1.0)

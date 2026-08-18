@@ -242,3 +242,40 @@ def test_create_does_not_stamp_the_schema_version_but_finish_does(tmp_path):
     assert store.get_meta("schema_version") is None
     store.finish()
     assert store.get_meta("schema_version") == str(SCHEMA_VERSION)
+
+
+def test_phrase_prefix_lookups_return_a_pinned_order_not_just_a_deduped_set(tmp_path):
+    """Deterministic candidate order is a documented property; pin the ORDER BY.
+
+    Unparked from Task 8: the previous test pinned deduplication and tie-breaking
+    but never the full `weight DESC, length(text), text` ordering as a sequence.
+    """
+    store = Store.create(tmp_path / "db_order.sqlite")
+    store.add_phrase("ce du", "测度", 900.0)  # heaviest, so first whatever its length
+    store.add_phrase("ce shi", "测试", 500.0)  # tied weight, shortest text
+    store.add_phrase("ce shi", "测试甲", 500.0)  # tied weight and length, sorts last
+    store.add_phrase("ce ai", "aaa", 500.0)  # tied weight and length
+    store.add_phrase("ce ai", "zzz", 500.0)
+    store.finish()
+
+    expected = ["测度", "测试", "aaa", "zzz", "测试甲"]
+    assert [t for t, _w in store.phrases_for_syllable_prefix("ce", limit=10)] == expected
+    assert [t for t, _w in store.phrases_for_partial("ce", limit=10)] == expected
+    # The exact key lookup shares the ordering clause, so pin it there too.
+    assert [t for t, _w in store.phrases_for_key("ce shi", limit=10)] == ["测试", "测试甲"]
+
+
+def test_open_handles_a_data_directory_with_uri_punctuation(tmp_path):
+    """A Windows-legal directory name containing #, ? or % must still open.
+
+    The read-only connection used to be built by f-string, so any of these
+    characters produced a URI that meant something else entirely.
+    """
+    awkward = tmp_path / "we#ird ?dir 100%"
+    awkward.mkdir()
+    path = awkward / "db.sqlite"
+    store = _build(path)
+    store.close()
+
+    reopened = Store.open(path)
+    assert reopened.has_char(ord("十"))

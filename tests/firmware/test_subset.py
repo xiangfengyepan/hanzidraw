@@ -76,3 +76,31 @@ def test_select_emits_the_primary_reading_not_an_earlier_alternate(tmp_path):
     store.finish()
     entries = select(store, must="")
     assert entries[0].pinyin == "le"
+
+
+def test_a_required_set_that_alone_exceeds_the_budget_warns_with_the_overage(tmp_path):
+    # `must` characters deliberately bypass the budget -- they are what the
+    # export exists for -- but that used to happen silently, and the CLI then
+    # printed negative headroom with no explanation.
+    from hanzidraw.data.store import Store
+    from hanzidraw.firmware.subset import select
+
+    store = Store.create(tmp_path / "db.sqlite")
+    medians = tuple(((-400, y), (400, y)) for y in range(-300, 400, 100))
+    for index, ch in enumerate("沣潘叶祥"):
+        store.add_char(ord(ch), index + 1, len(medians), medians, None)
+        store.add_reading("x" + ch, ord(ch), is_primary=True)
+    store.finish()
+
+    lines: list[str] = []
+    entries = select(store, must="沣潘叶祥", budget_bytes=64, log=lines.append)
+
+    assert len(entries) == 4  # kept anyway: required characters win
+    warnings = [line for line in lines if "budget" in line]
+    assert len(warnings) == 1
+    spent = sum(e.cost_bytes for e in entries)
+    assert str(spent - 64) in warnings[0] or f"{(spent - 64) / 1024:.1f}" in warnings[0]
+
+    quiet: list[str] = []
+    select(store, must="沣", budget_bytes=100_000, log=quiet.append)
+    assert [line for line in quiet if "budget" in line] == []

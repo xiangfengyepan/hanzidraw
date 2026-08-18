@@ -558,3 +558,40 @@ def test_a_completed_draw_still_advances_the_carriage(qtbot, window):
     placed = window.canvas.sheet.placed
     assert len(placed) == 2
     assert placed[1].ox == pytest.approx(placed[0].ox + window.canvas.sheet.pitch)
+
+
+def test_undo_owns_the_sheet_so_the_next_glyph_reuses_the_cell(qtbot, window):
+    # CanvasView.clear() cleared the Sheet but undo() left that to the window to
+    # remember; now undo() owns it, like clear() does.
+    _type(qtbot, window, "shi")
+    qtbot.keyClick(window, Qt.Key.Key_2)
+    first = window.canvas.sheet.placed[0]
+
+    window.canvas.undo()
+    assert window.canvas.sheet.placed == ()
+    assert window.canvas.glyph_count == 0
+
+    _type(qtbot, window, "shi")
+    qtbot.keyClick(window, Qt.Key.Key_2)
+    assert window.canvas.sheet.placed[0].ox == pytest.approx(first.ox)
+    assert window.canvas.sheet.placed[0].oy == pytest.approx(first.oy)
+
+
+def test_unparseable_outline_data_reaches_the_status_bar(qtbot, tmp_path):
+    (tmp_path / "c.toml").write_text('[glyph]\nstyle = "outline"\n', encoding="utf-8")
+    store = Store.create(tmp_path / "db.sqlite")
+    store.add_char(ord("十"), 10, 2, MEDIANS, ("M 0 0 A 1 1 0 0 1 10 10",))
+    store.add_reading("shi", ord("十"))
+    store.finish()
+    win = MainWindow(
+        store=store,
+        cfg=load_config(tmp_path / "c.toml"),
+        learn_path=tmp_path / "learn.json",
+    )
+    qtbot.addWidget(win)
+
+    _type(qtbot, win, "shi")
+    qtbot.keyClick(win, Qt.Key.Key_Space)
+
+    assert "outline" in win.statusBar().currentMessage()
+    assert win.canvas.glyph_count == 1  # drawn as brush strokes rather than lost

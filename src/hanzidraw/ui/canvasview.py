@@ -6,7 +6,7 @@ import math
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QSize, Qt, QTimer
+from PySide6.QtCore import QPointF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
@@ -19,6 +19,11 @@ FRAME_MS = 16
 
 
 class CanvasView(QWidget):
+    #: Emitted when a character's outline data cannot be parsed and the brush was
+    #: drawn instead. The window puts it in the status bar: a paintEvent has
+    #: nowhere to report anything, which is why the parse happens at commit time.
+    outline_failed = Signal(str)
+
     # Keys that affect the Sheet's geometry. Any other key is paint-time-only:
     # the canvas can just re-render existing content with the new value.
     _LAYOUT_KEYS = ("canvas.columns", "canvas.advance", "glyph.size_px", "canvas.wrap")
@@ -38,6 +43,7 @@ class CanvasView(QWidget):
         self._current_text = ""
         self._current_box = (0.0, 0.0, 0.0)
         self._current_outline: tuple[str, ...] | None = None
+        self._current_contour: QPainterPath | None = None
         self._timeline: Timeline | None = None
         self._started = 0.0
         self._frozen_strokes: int | None = None
@@ -144,18 +150,13 @@ class CanvasView(QWidget):
         # current's contour is placed *before* the box is overwritten below --
         # once overwritten, the old glyph's cell position is gone for good.
         if self._current is not None:
-            done_contour = (
-                self._outline_path(self._current_outline, *self._current_box)
-                if self._current_outline
-                else None
-            )
-            self._done.append((self._current, self._current_text, done_contour))
+            self._done.append((self._current, self._current_text, self._current_contour))
         self._current_box = (ox, oy, size)
         if self._mode == "single":
             self._done.clear()
         self._current = glyph
         self._current_text = text
-        self._current_outline = outline
+        self._current_outline, self._current_contour = self._parse_outline(outline, ox, oy, size)
         self._frozen_strokes = None
         animated = self._cfg is None or bool(self._cfg.get("glyph.animation.enabled"))
         if animated:
@@ -169,6 +170,26 @@ class CanvasView(QWidget):
         self._sync_size()
         self.update()
 
+    def _parse_outline(self, outline, ox: float, oy: float, size: float):
+        """Turn outline path data into a placed contour, once, at commit time.
+
+        ``parse_path`` raises on data it does not recognise, and a ``paintEvent``
+        is the one place in this project where the "a failure is a message, not a
+        traceback" rule cannot be honoured: there is nowhere to put a message and
+        an exception leaves the QPainter unended. So the parse happens here, and a
+        character whose outline is unusable falls back to the brush with a message.
+        """
+        if not outline:
+            return (None, None)
+        try:
+            return (outline, self._outline_path(outline, ox, oy, size))
+        except ValueError as exc:
+            self.outline_failed.emit(
+                f"outline data for {self._current_text or '?'} is unusable ({exc}); "
+                f"drew brush strokes instead"
+            )
+            return (None, None)
+
     def next_cell(self) -> tuple[float, float, float]:
         """The (ox, oy, size) box the next glyph will occupy, without claiming it."""
         ox, oy = self._sheet.next_origin()
@@ -181,11 +202,19 @@ class CanvasView(QWidget):
         return placed
 
     def undo(self) -> None:
+        """Drop the last glyph *and* free its cell.
+
+        The carriage belongs with the drawing: leaving the sheet to the caller
+        (as this used to) meant undo only half worked if a caller forgot.
+        """
         self._timer.stop()
         if self._current is not None:
             self._current = None
         elif self._done:
             self._done.pop()
+        self._sheet.undo()
+        self._current_outline = None
+        self._current_contour = None
         self._sync_size()
         self.update()
 
@@ -193,6 +222,8 @@ class CanvasView(QWidget):
         self._timer.stop()
         self._done.clear()
         self._current = None
+        self._current_outline = None
+        self._current_contour = None
         self._sheet.clear()
         self._sync_size()
         self.update()
@@ -321,10 +352,8 @@ class CanvasView(QWidget):
             painter.drawText(QPointF(x + font_px * 0.35, y - font_px * 0.35), str(index))
         painter.restore()
 
-    def _paint_outline(self, painter, glyph, outline, box, color) -> None:
+    def _paint_outline(self, painter, glyph, contour, size, color) -> None:
         """Fill the contour progressively: clip to it, then sweep along the median."""
-        ox, oy, size = box
-        contour = self._outline_path(outline, ox, oy, size)
         painter.save()
         painter.setClipPath(contour)
         painter.setPen(self._pen(color, size))  # a pen as wide as the glyph fills the clip
@@ -372,11 +401,11 @@ class CanvasView(QWidget):
 
         visible = self._visible_current()
         if visible is not None:
-            if style == "outline" and self._current_outline:
+            if style == "outline" and self._current_contour is not None:
                 painter.setPen(self._pen(ghost, width))
-                painter.drawPath(self._outline_path(self._current_outline, *self._current_box))
+                painter.drawPath(self._current_contour)
                 self._paint_outline(
-                    painter, visible, self._current_outline, self._current_box, color
+                    painter, visible, self._current_contour, self._current_box[2], color
                 )
             else:
                 painter.drawPath(self._path(visible.strokes))

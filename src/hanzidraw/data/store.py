@@ -105,7 +105,10 @@ class Store:
     def open(cls, path: Path) -> Store:
         if not path.exists():
             raise StoreError(f"no character database at {path}; run 'hanzidraw fetch-data' first")
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        # as_uri() percent-encodes, which an f-string does not: a Windows-legal
+        # data directory containing "#", "?" or "%" would otherwise produce a URI
+        # that means something else entirely (or fails outright).
+        conn = sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)
         store = cls(conn, path)
         try:
             version = store.get_meta("schema_version")

@@ -183,3 +183,24 @@ def test_phrase_source_incomplete_final_syllable_uses_partial_lookup(tmp_path):
     assert seg.partial == "j"  # incomplete: mid-syllable, not yet "jing"
     cands = src.lookup(seg, limit=10)
     assert [c.text for c in cands] == ["北京"]
+
+
+def test_importing_the_ime_or_the_output_protocol_does_not_pull_in_sqlite3():
+    """The layering, checked mechanically rather than by inspection.
+
+    `ime` is pure stdlib with no database dependency, and `output.base` is the
+    3-method protocol -- neither should drag sqlite3 in. Both used to, through an
+    annotation-only `Store` import. Run in a subprocess because sqlite3 is long
+    since imported in this one.
+    """
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, hanzidraw.ime.session, hanzidraw.ime.sources, hanzidraw.output.base; "
+        "print('sqlite3' in sys.modules)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "False", result.stdout
