@@ -11,7 +11,9 @@ from .config import data_dir, db_path
 
 
 def _cmd_fetch_data(args: argparse.Namespace) -> int:
-    from .data.build import build
+    import zlib
+
+    from .data.build import build, failing_source
     from .data.fetch import FetchError, fetch_all, sha256_of_file
     from .data.parse import DataFormatError
     from .data.sources import SOURCES
@@ -54,6 +56,20 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
         report = build(raw, db, medians_only=args.medians_only, digests=digests, log=print)
     except (DataFormatError, StoreError) as exc:
         print(f"build failed: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, zlib.error, UnicodeDecodeError) as exc:
+        # A corrupt or truncated cached download is the realistic trigger here
+        # (gzip.BadGzipFile is an OSError); build() tags the offending file onto
+        # the exception so this message can point at the right download.
+        # The existing database, if any, is untouched -- build() swaps in a
+        # temp file only on success.
+        name = failing_source(exc) or raw
+        print(
+            f"build failed: could not read {name} ({exc}); the download may be "
+            f"corrupt or truncated -- re-run with "
+            f"'hanzidraw fetch-data --rebuild --refetch'",
+            file=sys.stderr,
+        )
         return 1
     print(f"database: {db} ({db.stat().st_size / 1e6:.1f} MB)")
     return 0 if report.chars else 1

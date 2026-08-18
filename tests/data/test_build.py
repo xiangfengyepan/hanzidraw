@@ -1,5 +1,7 @@
 import gzip
 
+import pytest
+
 from hanzidraw.data.build import build
 from hanzidraw.data.store import Store
 
@@ -176,3 +178,45 @@ def test_build_does_not_duplicate_a_reading_it_already_has(tmp_path, fixtures):
     store = Store.open(db)
     rows = store.chars_for_reading("yi", limit=10)
     assert len([r for r in rows if r[0] == ord("一")]) == 1
+
+
+def test_a_failed_build_leaves_the_existing_database_byte_identical(tmp_path, fixtures):
+    """The realistic disaster: a corrupt cached download must not cost the owner
+    the database they already have. It took 20 minutes to build."""
+    raw = _raw(tmp_path, fixtures)
+    db = tmp_path / "db.sqlite"
+    build(raw, db)
+    before = db.read_bytes()
+
+    # A truncated or corrupt cedict.txt.gz fails *after* the character rows
+    # have been written, i.e. squarely in the middle of the build.
+    (raw / "cedict.txt.gz").write_bytes(b"this is not a gzip stream")
+
+    with pytest.raises(OSError):
+        build(raw, db)
+
+    assert db.read_bytes() == before
+    assert not db.with_suffix(".sqlite.tmp").exists()
+
+
+def test_a_failed_first_build_leaves_no_database_and_no_temp_file(tmp_path, fixtures):
+    raw = _raw(tmp_path, fixtures)
+    (raw / "cedict.txt.gz").write_bytes(b"this is not a gzip stream")
+    db = tmp_path / "db.sqlite"
+
+    with pytest.raises(OSError):
+        build(raw, db)
+
+    assert not db.exists()
+    assert not db.with_suffix(".sqlite.tmp").exists()
+
+
+def test_a_successful_rebuild_replaces_the_database_and_removes_the_temp_file(tmp_path, fixtures):
+    raw = _raw(tmp_path, fixtures)
+    db = tmp_path / "db.sqlite"
+    build(raw, db)
+    build(raw, db)  # a second build over a live database is the --rebuild path
+
+    assert not db.with_suffix(".sqlite.tmp").exists()
+    store = Store.open(db)
+    assert store.has_char(ord("十"))

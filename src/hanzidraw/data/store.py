@@ -90,12 +90,16 @@ class Store:
 
     @classmethod
     def create(cls, path: Path) -> Store:
+        """Create an empty, deliberately *unstamped* database.
+
+        ``schema_version`` is written by ``finish()``, not here: a build that
+        dies partway through must not leave behind a file that ``open()``
+        accepts as a valid database and then serves zero candidates from.
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(path)
         conn.executescript(_SCHEMA)
-        store = cls(conn, path)
-        store.set_meta("schema_version", str(SCHEMA_VERSION))
-        return store
+        return cls(conn, path)
 
     @classmethod
     def open(cls, path: Path) -> Store:
@@ -107,6 +111,11 @@ class Store:
             version = store.get_meta("schema_version")
         except sqlite3.DatabaseError as exc:
             raise StoreError(f"{path} is not a hanzidraw database ({exc})") from exc
+        if version is None:
+            raise StoreError(
+                f"{path} has no schema version: it looks like a build that did not "
+                f"finish; run 'hanzidraw fetch-data --rebuild'"
+            )
         if version != str(SCHEMA_VERSION):
             raise StoreError(
                 f"{path} has schema version {version}, this build needs "
@@ -115,7 +124,9 @@ class Store:
         return store
 
     def finish(self) -> None:
+        """Index, stamp the schema version, commit. The build is valid only after this."""
         self._conn.executescript(_INDEXES)
+        self.set_meta("schema_version", str(SCHEMA_VERSION))
         self._conn.commit()
 
     def close(self) -> None:

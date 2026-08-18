@@ -112,3 +112,37 @@ def test_fetch_data_reports_a_message_not_a_traceback_for_an_unrecognised_header
     assert "Traceback" not in captured.err
     assert "column" in captured.err
     assert not db.exists()
+
+
+def test_fetch_data_reports_a_message_not_a_traceback_for_a_corrupt_gzip_source(
+    tmp_path, fixtures, capsys, monkeypatch
+):
+    """A corrupt cached download is a message naming the file, not a traceback.
+
+    The cedict source URL is redirected at a local corrupt file, so the test is
+    offline and behaves the same whether the cached copy is reused or refetched.
+    """
+    raw = _raw_without_hanzidb(tmp_path, fixtures)
+    (raw / "hanziDB.csv").write_text(
+        (fixtures / "hanzidb_sample.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    corrupt = tmp_path / "upstream-cedict.txt.gz"
+    corrupt.write_bytes(b"this is not a gzip stream")
+    (raw / "cedict.txt.gz").write_bytes(corrupt.read_bytes())
+    patched_sources = tuple(
+        dataclasses.replace(s, url=corrupt.resolve().as_uri()) if s.name == "cedict" else s
+        for s in sources.SOURCES
+    )
+    monkeypatch.setattr(sources, "SOURCES", patched_sources)
+
+    db = tmp_path / "db.sqlite"
+    rc = cli.main(["fetch-data", "--raw-dir", str(raw), "--db", str(db)])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+    assert "cedict.txt.gz" in captured.err
+    assert "--refetch" in captured.err
+    assert not db.exists()
+    assert not db.with_suffix(".sqlite.tmp").exists()

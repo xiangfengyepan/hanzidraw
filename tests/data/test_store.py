@@ -81,8 +81,9 @@ def test_open_rejects_a_missing_database(tmp_path):
 def test_open_rejects_a_stale_schema(tmp_path):
     path = tmp_path / "db.sqlite"
     store = _build(path)
+    # set_meta commits, and finish() is what stamps schema_version, so calling
+    # finish() again here would just put the current version back.
     store.set_meta("schema_version", str(SCHEMA_VERSION + 1))
-    store.finish()
     store.close()
     with pytest.raises(StoreError) as exc:
         Store.open(path)
@@ -94,7 +95,6 @@ def test_open_rejects_the_old_schema_version_1(tmp_path):
     path = tmp_path / "db.sqlite"
     store = _build(path)
     store.set_meta("schema_version", "1")
-    store.finish()
     store.close()
     with pytest.raises(StoreError) as exc:
         Store.open(path)
@@ -106,7 +106,6 @@ def test_open_rejects_the_old_schema_version_2(tmp_path):
     path = tmp_path / "db.sqlite"
     store = _build(path)
     store.set_meta("schema_version", "2")
-    store.finish()
     store.close()
     with pytest.raises(StoreError) as exc:
         Store.open(path)
@@ -217,3 +216,29 @@ def test_phrases_for_partial_is_plain_string_prefix_matching(tmp_path):
     # exactly what a real IME should do.
     assert store.phrases_for_partial("be", limit=10) == [("北京", 5000.0), ("北京市", 100.0)]
     assert store.phrases_for_partial("bei", limit=10) == [("北京", 5000.0), ("北京市", 100.0)]
+
+
+def test_open_rejects_a_file_whose_build_never_finished(tmp_path):
+    """A half-built database must not present itself as a valid one.
+
+    ``finish()`` -- not ``create()`` -- stamps schema_version, so a build that
+    died partway through leaves a file with no version at all, and ``open``
+    sends the user to --rebuild instead of serving zero candidates in silence.
+    """
+    path = tmp_path / "half.sqlite"
+    store = Store.create(path)
+    store.add_char(ord("十"), freq_rank=131, nstroke=2, medians=MEDIANS, outline=None)
+    store.close()
+
+    assert path.exists()
+    with pytest.raises(StoreError) as exc:
+        Store.open(path)
+    assert "--rebuild" in str(exc.value)
+
+
+def test_create_does_not_stamp_the_schema_version_but_finish_does(tmp_path):
+    path = tmp_path / "db.sqlite"
+    store = Store.create(path)
+    assert store.get_meta("schema_version") is None
+    store.finish()
+    assert store.get_meta("schema_version") == str(SCHEMA_VERSION)
