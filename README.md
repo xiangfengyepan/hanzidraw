@@ -84,7 +84,9 @@ A measured build produces:
 
 - **7,743** drawable characters, **8,310** readings, **108,202** phrases
 - schema version **3**
-- database size **20,516,864 bytes** (~20.5 MB)
+- database size **20,525,056 bytes** (~20.5 MB). SQLite page packing varies
+  slightly between rebuilds — a few kilobytes either way is normal and not a content
+  difference; the row counts above are the figures that matter.
 
 Everything the build drops is counted and printed rather than silently
 discarded: 2,154 characters were skipped for having no stroke data, 686
