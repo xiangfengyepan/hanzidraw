@@ -90,7 +90,7 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
 
 
 def _cmd_draw(args: argparse.Namespace) -> int:
-    from .config import load_config
+    from .config import _is_colour, load_config
     from .data.glyphs import load_glyph
     from .data.store import Store, StoreError
     from .output.base import Style, draw_glyph
@@ -108,8 +108,14 @@ def _cmd_draw(args: argparse.Namespace) -> int:
     if columns < 1:
         print(f"--columns must be at least 1, got {columns!r}", file=sys.stderr)
         return 1
-    if not color:
-        print(f"--color must not be empty, got {color!r}", file=sys.stderr)
+    if not _is_colour(color):
+        # The same validator config.toml's glyph.color/canvas.background/etc.
+        # use: a value the config surface would reject must not be silently
+        # accepted here just because it arrived on the command line instead.
+        print(
+            f'--color must be "#rgb", "#rrggbb" or a basic colour name, got {color!r}',
+            file=sys.stderr,
+        )
         return 1
 
     chars = [ch for ch in args.text if not ch.isspace()]

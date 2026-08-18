@@ -222,8 +222,13 @@ style = "brush"               # brush (constant-width strokes, what the
                                # typographic contour, swelling and tapering)
 size_px = 240
 stroke_width_px = 14
-color = "#111111"              # one colour: "#rgb", "#rrggbb" or a basic
-                               # colour name (red, black, navy, …)
+color = "#111111"              # one colour: "#rgb", "#rrggbb", or one of
+                               # these 20 names: aqua, black, blue, cyan,
+                               # fuchsia, gray, green, grey, lime, magenta,
+                               # maroon, navy, olive, orange, purple, red,
+                               # silver, teal, white, yellow. Anything else
+                               # (e.g. "hotpink") is a config error -- use
+                               # a hex value instead.
 outline_color = "#cccccc"      # colour of the not-yet-drawn ghost outline
 show_pending_outline = true    # ghost of the full character while it draws
 stroke_numbers = false         # number each stroke at its start, in

@@ -51,6 +51,24 @@ def test_empty_color_is_rejected(tmp_path, capsys):
     assert not out.exists()
 
 
+def test_a_malformed_color_is_rejected_with_a_clean_message(tmp_path, capsys):
+    # I1: the CLI used to validate --color for emptiness only, so a value
+    # config.toml would reject outright (not a hex triplet, not one of the
+    # 20 named colours) sailed straight through here and reached Qt/the SVG
+    # backend as a bare, unvalidated string.
+    db = _make_store(tmp_path / "db.sqlite")
+    out = tmp_path / "out.svg"
+
+    rc = cli.main(["draw", "沣", "-o", str(out), "--db", str(db), "--color", "not a colour"])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+    assert "not a colour" in captured.err
+    assert not out.exists()
+
+
 @pytest.mark.parametrize("text", ["", "   "])
 def test_empty_or_whitespace_only_text_is_rejected(tmp_path, capsys, text):
     db = _make_store(tmp_path / "db.sqlite")
