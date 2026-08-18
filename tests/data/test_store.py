@@ -31,7 +31,7 @@ def _build(path):
     store.add_char(ord("是"), freq_rank=4, nstroke=9, medians=MEDIANS, outline=None)
     store.add_reading("shi", ord("十"))
     store.add_reading("shi", ord("是"))
-    store.add_phrase("shishi", "实施", 100.0)
+    store.add_phrase("shi shi", "实施", 100.0)
     store.add_phrase("shi", "十", 5.0)
     store.set_meta("source_graphics_sha256", "abc")
     store.finish()
@@ -61,11 +61,15 @@ def test_prefix_lookup_matches_a_partial_reading(tmp_path):
     assert store.chars_for_prefix("zzz", limit=10) == []
 
 
-def test_phrase_lookup_by_exact_key_and_by_prefix(tmp_path):
+def test_phrase_lookup_by_exact_key_and_by_syllable_prefix_and_partial(tmp_path):
     store = _build(tmp_path / "db.sqlite")
-    assert store.phrases_for_key("shishi", limit=5) == [("实施", 100.0)]
-    # commonest first: weight dominates, length only breaks ties
-    assert [p[0] for p in store.phrases_for_prefix("shi", limit=5)] == ["实施", "十"]
+    assert store.phrases_for_key("shi shi", limit=5) == [("实施", 100.0)]
+    # syllable_prefix excludes the exact key "shi" (十, 1 syllable) and only
+    # returns keys that continue at a boundary, i.e. "shi shi" (实施).
+    assert store.phrases_for_syllable_prefix("shi", limit=5) == [("实施", 100.0)]
+    # partial is plain-string-prefix and so includes the exact key literally;
+    # commonest first: weight dominates, length only breaks ties.
+    assert [p[0] for p in store.phrases_for_partial("shi", limit=5)] == ["实施", "十"]
 
 
 def test_open_rejects_a_missing_database(tmp_path):
@@ -85,19 +89,32 @@ def test_open_rejects_a_stale_schema(tmp_path):
     assert "schema" in str(exc.value).lower()
 
 
-def test_phrases_for_prefix_deduplicates_by_text_and_keeps_max_weight(tmp_path):
-    """Same phrase text under different keys returns once with highest weight."""
+def test_open_rejects_the_old_schema_version_1(tmp_path):
+    """A real pre-Task-10b database (schema_version 1) must be rejected, not mismatched."""
+    path = tmp_path / "db.sqlite"
+    store = _build(path)
+    store.set_meta("schema_version", "1")
+    store.finish()
+    store.close()
+    with pytest.raises(StoreError) as exc:
+        Store.open(path)
+    assert "--rebuild" in str(exc.value)
+
+
+def test_phrases_for_syllable_and_partial_prefix_both_dedupe_by_text(tmp_path):
+    """Same phrase text under two different continuations dedupes for both methods."""
     store = Store.create(tmp_path / "db_dup.sqlite")
     # Add the same text under two different keys with different weights
-    store.add_phrase("cedu", "测度", 100.0)
-    store.add_phrase("ceduo", "测度", 90.0)
+    store.add_phrase("ce du", "测度", 100.0)
+    store.add_phrase("ce duo", "测度", 90.0)
     store.finish()
-    # Should return the text once with the higher weight
-    rows = store.phrases_for_prefix("ce", limit=100)
-    texts = [t for t, w in rows]
-    assert texts.count("测度") == 1
-    # The weight should be the maximum of the two
-    assert [w for t, w in rows if t == "测度"] == [100.0]
+    # Should return the text once with the higher weight, from either method
+    sp_rows = store.phrases_for_syllable_prefix("ce", limit=100)
+    assert [t for t, w in sp_rows] == ["测度"]
+    assert [w for t, w in sp_rows] == [100.0]
+    partial_rows = store.phrases_for_partial("ce", limit=100)
+    assert [t for t, w in partial_rows] == ["测度"]
+    assert [w for t, w in partial_rows] == [100.0]
 
 
 def test_phrases_for_key_ordering_is_deterministic_on_ties(tmp_path):
@@ -114,20 +131,59 @@ def test_phrases_for_key_ordering_is_deterministic_on_ties(tmp_path):
         assert [t for t, w in rows] == ["aaa", "bbb", "zzz"]
 
 
-def test_phrases_for_prefix_ordering_is_deterministic_on_ties(tmp_path):
-    """phrases_for_prefix: same weight/length across keys -> stable order."""
+def test_phrases_for_syllable_prefix_ordering_is_deterministic_on_ties(tmp_path):
+    """phrases_for_syllable_prefix: distinct texts, same weight/length -> stable order."""
     store = Store.create(tmp_path / "db_det_prefix.sqlite")
-    # Add three texts with identical weight and length under different keys
-    # sharing a prefix (ce*).
-    store.add_phrase("ceaaa", "测试", 500.0)
-    store.add_phrase("cebbb", "测试", 500.0)  # Same text, different key
-    store.add_phrase("ceccb", "测试", 500.0)  # Same text, another key
+    # Three distinct continuations of "ce", each a different two-syllable key,
+    # each with a different (but tied) text.
+    store.add_phrase("ce ai", "aaa", 500.0)
+    store.add_phrase("ce an", "bbb", 500.0)
+    store.add_phrase("ce ang", "zzz", 500.0)
     store.finish()
-    # Call multiple times and verify the text appears only once with stable order
+    # Call multiple times and verify the order is stable
     for _ in range(3):
-        rows = store.phrases_for_prefix("ce", limit=10)
-        texts = [t for t, w in rows]
-        # Should appear exactly once due to GROUP BY dedup
-        assert texts.count("测试") == 1
-        # And weight should be the max (all are 500.0)
-        assert [w for t, w in rows if t == "测试"] == [500.0]
+        rows = store.phrases_for_syllable_prefix("ce", limit=10)
+        assert [t for t, w in rows] == ["aaa", "bbb", "zzz"]
+
+
+def test_phrases_for_syllable_prefix_respects_syllable_boundaries(tmp_path):
+    """Predictions must not bleed across a syllable boundary (Task 10b's bug)."""
+    store = Store.create(tmp_path / "db_boundary.sqlite")
+    store.add_phrase("xian", "西安", 1000.0)
+    store.add_phrase("xiang yao", "想要", 900.0)
+    store.add_phrase("he nan", "河南", 800.0)
+    store.add_phrase("heng liang", "衡量", 700.0)
+    store.add_phrase("bei jing", "北京", 5000.0)
+    store.add_phrase("bei jing shi", "北京市", 100.0)
+    store.finish()
+    # 想要 (xiang|yao) must not bleed in; 西安 is the exact key, excluded here.
+    assert store.phrases_for_syllable_prefix("xian", limit=10) == []
+    # 北京市 continues at a boundary; 北京 itself (the exact key) is excluded.
+    assert store.phrases_for_syllable_prefix("bei jing", limit=10) == [("北京市", 100.0)]
+    # Neither he|nan nor heng- bleeds into a "hen" query.
+    assert store.phrases_for_syllable_prefix("hen", limit=10) == []
+    # But "he" genuinely continues into "he nan".
+    assert store.phrases_for_syllable_prefix("he", limit=10) == [("河南", 800.0)]
+
+
+def test_phrases_for_partial_is_plain_string_prefix_matching(tmp_path):
+    """phrases_for_partial is mid-syllable prediction: literal prefix, no boundary check."""
+    store = Store.create(tmp_path / "db_partial.sqlite")
+    store.add_phrase("xian", "西安", 1000.0)
+    store.add_phrase("xiang yao", "想要", 900.0)
+    store.add_phrase("he nan", "河南", 800.0)
+    store.add_phrase("heng liang", "衡量", 700.0)
+    store.add_phrase("bei jing", "北京", 5000.0)
+    store.add_phrase("bei jing shi", "北京市", 100.0)
+    store.finish()
+    assert store.phrases_for_partial("bei j", limit=10) == [("北京", 5000.0), ("北京市", 100.0)]
+    # "be" is a legal partial syllable (a prefix of "bei"/"ben"/"beng"), and
+    # "bei jing" literally starts with the two characters "be" -- plain prefix
+    # matching correctly offers it here. This is not a boundary bleed: "be" is
+    # a prefix of the *first syllable itself* ("bei"), not a jump past it, so
+    # syllable-boundary awareness (phrases_for_syllable_prefix's job) does not
+    # apply to an incomplete final syllable. This is the intended behaviour
+    # for a user who is mid-way through typing "bei": offering 北京/北京市 is
+    # exactly what a real IME should do.
+    assert store.phrases_for_partial("be", limit=10) == [("北京", 5000.0), ("北京市", 100.0)]
+    assert store.phrases_for_partial("bei", limit=10) == [("北京", 5000.0), ("北京市", 100.0)]

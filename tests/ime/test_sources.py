@@ -15,9 +15,9 @@ def _store(tmp_path):
         store.add_char(cp, freq_rank=rank, nstroke=1, medians=MEDIANS, outline=None)
         for reading in readings:
             store.add_reading(reading, cp)
-    store.add_phrase("beijing", "北京", 5000.0)
-    store.add_phrase("beijing", "背景", 4000.0)
-    store.add_phrase("beijingren", "北京人", 100.0)
+    store.add_phrase("bei jing", "北京", 5000.0)
+    store.add_phrase("bei jing", "背景", 4000.0)
+    store.add_phrase("bei jing ren", "北京人", 100.0)
     store.finish()
     return store
 
@@ -56,11 +56,11 @@ def test_char_weights_decrease_with_frequency_rank(tmp_path):
 
 
 def test_phrase_source_deduplicates_prefix_vs_prefix_duplicates(tmp_path):
-    """Prefix-vs-prefix duplicates are deduped (mirroring cedu/ceduo -> 测度)."""
+    """Prefix-vs-prefix duplicates are deduped (mirroring ce du/ce duo -> 测度)."""
     store = Store.create(tmp_path / "db_dup.sqlite")
-    # Add two phrases with the same text but different keys
-    store.add_phrase("cedu", "测度", 100.0)
-    store.add_phrase("ceduo", "测度", 90.0)
+    # Add two phrases with the same text but different (longer) continuations of "ce"
+    store.add_phrase("ce du", "测度", 100.0)
+    store.add_phrase("ce duo", "测度", 90.0)
     store.finish()
     src = PhraseSource(store)
     cands = src.lookup(segment("ce")[0], limit=5000)
@@ -72,9 +72,9 @@ def test_phrase_source_deduplicates_prefix_vs_prefix_duplicates(tmp_path):
 def test_phrase_source_honours_limit_when_distinct_candidates_exist(tmp_path):
     """limit is honoured even when exact rows eat into the budget."""
     store = Store.create(tmp_path / "db_limit.sqlite")
-    # One exact-key phrase and one longer-key prefix phrase
-    store.add_phrase("beijing", "北京", 5000.0)
-    store.add_phrase("beijingren", "北京人", 100.0)
+    # One exact-key phrase and one longer-key syllable-prefix phrase
+    store.add_phrase("bei jing", "北京", 5000.0)
+    store.add_phrase("bei jing ren", "北京人", 100.0)
     store.finish()
     src = PhraseSource(store)
     # At limit=2, we should get exactly 2 candidates (not under-filled)
@@ -118,14 +118,14 @@ def test_consumed_can_exceed_segmentation_syllables_on_resegmentation(tmp_path):
 def test_phrase_source_returns_exact_limit_when_prefix_deduped(tmp_path):
     """When deduplicating prefix rows, still return exactly limit candidates."""
     store = Store.create(tmp_path / "db_prefix_dup.sqlite")
-    # Same text keyed under different syllables - internally duplicated
-    store.add_phrase("cedu", "测度", 100.0)
-    store.add_phrase("ceduo", "测度", 90.0)
+    # Same text keyed under two different continuations of "ce" - internally duplicated
+    store.add_phrase("ce du", "测度", 100.0)
+    store.add_phrase("ce duo", "测度", 90.0)
     # One unique text to reach the limit
-    store.add_phrase("cedai", "测代", 80.0)
+    store.add_phrase("ce dai", "测代", 80.0)
     store.finish()
     src = PhraseSource(store)
-    # Prefix "ce" has no exact key, so lookup uses only prefix rows
+    # "ce" has no exact key in this store, so lookup uses only prefix rows
     seg = segment("ce")[0]
     # Despite 3 rows in the DB, they contain only 2 distinct texts.
     # With limit=2, we should get exactly 2 candidates.
@@ -136,3 +136,50 @@ def test_phrase_source_returns_exact_limit_when_prefix_deduped(tmp_path):
     assert set(texts) == {"测度", "测代"}
     # 测度 should appear exactly once with the max weight
     assert texts.count("测度") == 1
+
+
+def test_phrase_source_typing_xian_has_no_bled_xiang_prediction(tmp_path):
+    """Task 10b's bug: 'xian' must not surface 想要 (xiang|yao)."""
+    store = Store.create(tmp_path / "db_xian.sqlite")
+    store.add_phrase("xian", "西安", 1000.0)
+    store.add_phrase("xiang yao", "想要", 900.0)
+    store.finish()
+    src = PhraseSource(store)
+    cands = src.lookup(segment("xian")[0], limit=10)
+    assert [c.text for c in cands] == ["西安"]
+
+
+def test_phrase_source_typing_hen_has_no_bled_he_or_heng_prediction(tmp_path):
+    """Task 10b's bug: 'hen' must not surface 河南 (he|nan) or 衡量 (heng-)."""
+    store = Store.create(tmp_path / "db_hen.sqlite")
+    store.add_phrase("he nan", "河南", 800.0)
+    store.add_phrase("heng liang", "衡量", 700.0)
+    store.finish()
+    src = PhraseSource(store)
+    assert src.lookup(segment("hen")[0], limit=10) == []
+
+
+def test_phrase_source_typing_beijing_offers_exact_then_syllable_prediction(tmp_path):
+    """Complete input: exact match first, then a genuine syllable-boundary continuation."""
+    store = Store.create(tmp_path / "db_beijing.sqlite")
+    store.add_phrase("bei jing", "北京", 5000.0)
+    store.add_phrase("bei jing shi", "北京市", 100.0)
+    store.finish()
+    src = PhraseSource(store)
+    cands = src.lookup(segment("beijing")[0], limit=10)
+    assert [c.text for c in cands] == ["北京", "北京市"]
+    assert cands[0].consumed == 2
+    assert cands[1].consumed == 3
+
+
+def test_phrase_source_incomplete_final_syllable_uses_partial_lookup(tmp_path):
+    """Mid-syllable input ('beij' = bei + partial 'j'): no exact lookup, plain-prefix prediction."""
+    store = Store.create(tmp_path / "db_partial.sqlite")
+    store.add_phrase("bei jing", "北京", 5000.0)
+    store.finish()
+    src = PhraseSource(store)
+    seg = segment("beij")[0]
+    assert seg.syllables == ("bei",)
+    assert seg.partial == "j"  # incomplete: mid-syllable, not yet "jing"
+    cands = src.lookup(seg, limit=10)
+    assert [c.text for c in cands] == ["北京"]

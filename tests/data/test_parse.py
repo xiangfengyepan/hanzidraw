@@ -98,11 +98,17 @@ def test_parse_hanzidb_collects_unknown_syllables_and_skips_the_row():
     assert rows == []
 
 
-def test_parse_cedict_takes_the_simplified_form_and_a_toneless_key():
+def test_parse_cedict_takes_the_simplified_form_and_a_space_separated_key():
     entry = parse_cedict_line("北京 北京 [Bei3 jing1] /Beijing, capital of China/")
     assert entry.text == "北京"
-    assert entry.pinyin_key == "beijing"
+    assert entry.pinyin_key == "bei jing"
     assert parse_cedict_line("中國 中国 [Zhong1 guo2] /China/").text == "中国"
+
+
+def test_parse_cedict_key_is_space_separated_for_three_syllables():
+    entry = parse_cedict_line("北京市 北京市 [Bei3 jing1 shi4] /Beijing municipality/")
+    assert entry.text == "北京市"
+    assert entry.pinyin_key == "bei jing shi"
 
 
 def test_parse_cedict_rejects_comments_and_non_hanzi_entries():

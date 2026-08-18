@@ -140,7 +140,7 @@ def parse_cedict_line(line: str) -> CedictEntry | None:
         return None
     if not all(is_syllable(s) for s in syllables):
         return None
-    return CedictEntry(text=simplified, pinyin_key="".join(syllables))
+    return CedictEntry(text=simplified, pinyin_key=" ".join(syllables))
 
 
 def parse_cedict_char_reading(line: str) -> tuple[str, str] | None:

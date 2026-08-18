@@ -12,7 +12,7 @@ import zlib
 from collections.abc import Iterator
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS char (
@@ -188,7 +188,18 @@ class Store:
         ).fetchall()
         return [(str(t), float(w)) for t, w in rows]
 
-    def phrases_for_prefix(self, prefix: str, limit: int) -> list[tuple[str, float]]:
+    def phrases_for_syllable_prefix(self, prefix: str, limit: int) -> list[tuple[str, float]]:
+        """Keys that continue at a syllable boundary. Excludes the exact key itself."""
+        lo = prefix + " "
+        rows = self._conn.execute(
+            "SELECT text, MAX(weight) AS w FROM phrase WHERE pinyin_key >= ? "
+            "AND pinyin_key < ? GROUP BY text ORDER BY w DESC, length(text), text LIMIT ?",
+            (lo, lo + "￿", limit),
+        ).fetchall()
+        return [(str(t), float(w)) for t, w in rows]
+
+    def phrases_for_partial(self, prefix: str, limit: int) -> list[tuple[str, float]]:
+        """Plain prefix range, for when the last syllable typed is incomplete."""
         rows = self._conn.execute(
             "SELECT text, MAX(weight) AS w FROM phrase WHERE pinyin_key >= ? "
             "AND pinyin_key < ? GROUP BY text ORDER BY w DESC, length(text), text LIMIT ?",

@@ -59,26 +59,40 @@ class CharSource:
 
 
 class PhraseSource:
-    """Multi-character words, exact key first then longer keys sharing the prefix."""
+    """Multi-character words: exact key first, then predictions that continue it.
+
+    A complete segmentation (``seg.partial`` empty) gets an exact-key lookup
+    plus predictions from keys that continue at a syllable boundary. An
+    incomplete segmentation (the user is mid-syllable) skips the exact lookup
+    entirely and predicts from a plain-string-prefix match instead, since the
+    last syllable isn't finished yet and there is no boundary to respect.
+    """
 
     def __init__(self, store: Store) -> None:
         self._store = store
 
     def lookup(self, seg: Segmentation, limit: int) -> list[Candidate]:
-        key = seg.key + seg.partial
-        if not key or limit <= 0:
+        if limit <= 0:
             return []
-        exact_rows = self._store.phrases_for_key(key, limit)
-        exact = {text for text, _ in exact_rows}
+        exact: set[str] = set()
+        if seg.partial:
+            exact_rows: list[tuple[str, float]] = []
+            partial_key = " ".join((*seg.syllables, seg.partial))
+            prefix_rows = self._store.phrases_for_partial(partial_key, limit)
+        else:
+            key = " ".join(seg.syllables)
+            if not key:
+                return []
+            exact_rows = self._store.phrases_for_key(key, limit)
+            exact = {text for text, _ in exact_rows}
+            prefix_rows = self._store.phrases_for_syllable_prefix(key, limit - len(exact_rows))
+        # phrases_for_syllable_prefix structurally excludes the exact key (see
+        # Task 10b), so the exact and prefix result sets are disjoint and each
+        # is already distinct thanks to GROUP BY text -- no over-fetch
+        # headroom is needed. The `seen` set is kept as cheap insurance only.
         rows: list[tuple[str, float]] = list(exact_rows)
         seen = set(exact)
-        # The prefix range includes `key` itself, so the exact rows come back
-        # first; ask for headroom and filter rather than topping up by the
-        # shortfall, which those rows would consume entirely. Measured maximum
-        # real phrase weight is ~665,000 (就是), about 1,505× below the bonus.
-        for text, weight in self._store.phrases_for_prefix(key, limit + len(exact_rows)):
-            if len(rows) >= limit:
-                break
+        for text, weight in prefix_rows:
             if text in seen:
                 continue
             seen.add(text)
