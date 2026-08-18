@@ -29,6 +29,10 @@ class Sheet:
     def __init__(self, columns: int, advance: float, size: float, wrap: bool = True) -> None:
         if columns < 1:
             raise ValueError("columns must be at least 1")
+        if advance <= 0:
+            raise ValueError(f"advance must be positive, got {advance}")
+        if size <= 0:
+            raise ValueError(f"size must be positive, got {size}")
         self.columns = columns
         self.pitch = advance * size
         self.size = size
@@ -65,6 +69,8 @@ class Sheet:
         self._placed.clear()
 
     def size_px(self) -> tuple[float, float]:
+        # An empty sheet shows one row of grid: practice paper displays the next
+        # cell to be written in, so a blank canvas must not appear gridless.
         used = max(1, len(self._placed))
         if not self.wrap:
             return (used * self.pitch, self.pitch)
@@ -72,6 +78,11 @@ class Sheet:
         return (self.columns * self.pitch, rows * self.pitch)
 
     def grid_lines(self, kind: str) -> tuple[GridLine, ...]:
+        valid_kinds = {"none", "tian", "mi", "cross"}
+        if kind not in valid_kinds:
+            raise ValueError(
+                f"unknown grid kind {kind!r}; must be one of {', '.join(sorted(valid_kinds))}"
+            )
         if kind == "none":
             return ()
         width, height = self.size_px()
