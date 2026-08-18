@@ -82,23 +82,32 @@ class HanziDbRow:
     nstroke: int
 
 
-_REQUIRED_HANZIDB = ("character", "pinyin", "stroke_count", "frequency_rank")
+# Upstream hanziDB misspells this column as "charcter"; accept either, so the
+# parser keeps working if they ever fix it.
+_CHAR_COLUMNS = ("character", "charcter")
+_REQUIRED_HANZIDB = ("pinyin", "stroke_count", "frequency_rank")
 
 
-def parse_hanzidb(text: str) -> list[HanziDbRow]:
+def parse_hanzidb(text: str, *, unknown: set[str] | None = None) -> list[HanziDbRow]:
     reader = csv.DictReader(io.StringIO(text))
     found = tuple(reader.fieldnames or ())
+    char_col = next((c for c in _CHAR_COLUMNS if c in found), None)
     missing = [c for c in _REQUIRED_HANZIDB if c not in found]
+    if char_col is None:
+        missing.insert(0, "character (or charcter)")
     if missing:
         raise DataFormatError(
             f"hanziDB is missing column(s) {', '.join(missing)}; columns found: {', '.join(found)}"
         )
     rows: list[HanziDbRow] = []
     for raw in reader:
-        char = (raw.get("character") or "").strip()
+        char = (raw.get(char_col) or "").strip()
         if len(char) != 1 or not _HANZI.match(char):
             continue
-        readings = tuple(dict.fromkeys(r for r in split_readings(raw["pinyin"]) if is_syllable(r)))
+        normalised = split_readings(raw["pinyin"])
+        if unknown is not None:
+            unknown.update(r for r in normalised if not is_syllable(r))
+        readings = tuple(dict.fromkeys(r for r in normalised if is_syllable(r)))
         if not readings:
             continue
         try:

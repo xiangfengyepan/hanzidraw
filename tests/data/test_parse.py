@@ -74,6 +74,29 @@ def test_parse_hanzidb_names_the_missing_column(fixtures):
     assert "character" in str(exc.value)  # the error lists what it did find
 
 
+def test_parse_hanzidb_accepts_the_upstream_charcter_typo():
+    # Real hanziDB.csv misspells "character" as "charcter"; both must work.
+    rows = parse_hanzidb("charcter,pinyin,stroke_count,frequency_rank\n十,shi2,2,131\n")
+    assert rows[0].char == "十"
+    assert rows[0].freq_rank == 131
+
+
+def test_parse_hanzidb_raises_when_neither_character_spelling_is_present():
+    with pytest.raises(DataFormatError) as exc:
+        parse_hanzidb("hanzi,pinyin,stroke_count,frequency_rank\n十,shi2,2,131\n")
+    assert "character" in str(exc.value)
+    assert "hanzi" in str(exc.value)  # the error lists what it did find
+
+
+def test_parse_hanzidb_collects_unknown_syllables_and_skips_the_row():
+    unknown: set[str] = set()
+    rows = parse_hanzidb(
+        "character,pinyin,stroke_count,frequency_rank\n啊,xq,1,1\n", unknown=unknown
+    )
+    assert unknown == {"xq"}
+    assert rows == []
+
+
 def test_parse_cedict_takes_the_simplified_form_and_a_toneless_key():
     entry = parse_cedict_line("北京 北京 [Bei3 jing1] /Beijing, capital of China/")
     assert entry.text == "北京"

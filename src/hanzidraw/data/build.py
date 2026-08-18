@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import mean
 
-from ..ime.syllables import SYLLABLES
 from .parse import parse_cedict_line, parse_essay, parse_graphics_line, parse_hanzidb
 from .store import Store
 
@@ -67,11 +66,8 @@ def build(
                 geometry[record.char] = record
 
     say("reading character metadata")
-    rows = parse_hanzidb(_read_text(raw_dir / "hanziDB.csv"))
-
     unknown: set[str] = set()
-    for row in rows:
-        unknown |= {r for r in row.readings if r not in SYLLABLES}
+    rows = parse_hanzidb(_read_text(raw_dir / "hanziDB.csv"), unknown=unknown)
 
     if db.exists():
         db.unlink()

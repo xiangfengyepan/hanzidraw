@@ -71,3 +71,13 @@ def test_report_summary_mentions_the_counts(tmp_path, fixtures):
     report = build(_raw(tmp_path, fixtures), tmp_path / "db.sqlite")
     text = report.summary()
     assert "characters" in text and "phrases" in text
+
+
+def test_build_report_lists_unknown_syllables(tmp_path, fixtures):
+    raw = _raw(tmp_path, fixtures)
+    (raw / "hanziDB.csv").write_text(
+        "character,pinyin,stroke_count,frequency_rank\n十,shi,2,131\n啊,xq,1,999\n",
+        encoding="utf-8",
+    )
+    report = build(raw, tmp_path / "db.sqlite")
+    assert report.unknown_syllables == ("xq",)
