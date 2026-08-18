@@ -182,6 +182,64 @@ def test_fetch_data_reports_a_message_not_a_traceback_for_a_truncated_gzip_sourc
     assert not db.with_suffix(".sqlite.tmp").exists()
 
 
+def test_fetch_data_reports_a_message_not_a_traceback_when_the_db_dir_is_unwritable(
+    tmp_path, fixtures, capsys
+):
+    """H1: sqlite3.OperationalError is not an OSError, so it escaped every
+    existing message-not-a-traceback catch in cli.py and build().
+    """
+    raw = _raw_without_hanzidb(tmp_path, fixtures)
+    (raw / "hanziDB.csv").write_text(
+        (fixtures / "hanzidb_sample.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    readonly_dir = tmp_path / "readonly"
+    readonly_dir.mkdir()
+    db = readonly_dir / "db.sqlite"
+    readonly_dir.chmod(0o555)
+    try:
+        rc = cli.main(["fetch-data", "--raw-dir", str(raw), "--db", str(db)])
+    finally:
+        readonly_dir.chmod(0o755)  # so pytest can clean up tmp_path afterwards
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+    assert str(db) in captured.err
+    assert not db.exists()
+
+
+def test_fetch_data_does_not_advise_refetch_for_a_non_download_os_error(
+    tmp_path, fixtures, capsys, monkeypatch
+):
+    """H2: cli.py used to label *every* OSError out of build() as a possibly
+    corrupt/truncated download and tell the user to --refetch, even one that
+    has nothing to do with a downloaded source -- here, a permission error
+    swapping the finished temp file into place.
+    """
+    raw = _raw_without_hanzidb(tmp_path, fixtures)
+    (raw / "hanziDB.csv").write_text(
+        (fixtures / "hanzidb_sample.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    from hanzidraw.data import build as build_module
+
+    def _boom(*_a, **_kw):
+        raise OSError(13, "Permission denied", "/fake/final/db.sqlite")
+
+    monkeypatch.setattr(build_module.os, "replace", _boom)
+
+    db = tmp_path / "db.sqlite"
+    rc = cli.main(["fetch-data", "--raw-dir", str(raw), "--db", str(db)])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+    assert "--refetch" not in captured.err
+    assert "download" not in captured.err
+    assert "/fake/final/db.sqlite" in captured.err
+
+
 def test_fetch_data_refetches_a_corrupt_cached_download(tmp_path, fixtures, capsys, monkeypatch):
     """A non-empty file said nothing about whether it could be read back.
 

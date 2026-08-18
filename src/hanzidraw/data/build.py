@@ -59,8 +59,15 @@ _SOURCE_ATTR = "hanzidraw_source"
 
 
 def failing_source(exc: BaseException) -> str | None:
-    """Which source file a read failure came from, if the build tagged one on."""
-    return getattr(exc, _SOURCE_ATTR, None) or getattr(exc, "filename", None)
+    """Which *raw source* file a read failure came from, or None.
+
+    Only true for a read the build itself tagged via ``_naming`` -- i.e. one
+    of the downloaded sources under ``raw_dir``. Deliberately not a generic
+    "does this exception know a filename" check (``OSError.filename`` alone):
+    an unrelated I/O failure, such as swapping the finished database into
+    place, is not a download problem and must not be advertised as one.
+    """
+    return getattr(exc, _SOURCE_ATTR, None)
 
 
 @contextmanager

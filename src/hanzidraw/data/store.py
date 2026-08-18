@@ -97,8 +97,15 @@ class Store:
         accepts as a valid database and then serves zero candidates from.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(path)
-        conn.executescript(_SCHEMA)
+        try:
+            conn = sqlite3.connect(path)
+            conn.executescript(_SCHEMA)
+        except sqlite3.OperationalError as exc:
+            # The realistic trigger is a data directory the user cannot write
+            # to (read-only mount, wrong permissions, ...): sqlite reports
+            # that as "unable to open database file" with no path attached,
+            # so name it here rather than let it become a bare traceback.
+            raise StoreError(f"could not create database at {path} ({exc})") from exc
         return cls(conn, path)
 
     @classmethod

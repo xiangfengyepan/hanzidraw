@@ -64,20 +64,26 @@ def _cmd_fetch_data(args: argparse.Namespace) -> int:
         print(f"build failed: {exc}", file=sys.stderr)
         return 1
     except (OSError, zlib.error, UnicodeDecodeError, EOFError) as exc:
-        # A corrupt or truncated cached download is the realistic trigger here
-        # (gzip.BadGzipFile is an OSError; a gzip stream cut off mid-data raises
-        # the plain builtin EOFError instead, which is not an OSError); build()
-        # tags the offending file onto the exception so this message can point
-        # at the right download.
         # The existing database, if any, is untouched -- build() swaps in a
         # temp file only on success.
-        name = failing_source(exc) or raw
-        print(
-            f"build failed: could not read {name} ({exc}); the download may be "
-            f"corrupt or truncated -- re-run with "
-            f"'hanzidraw fetch-data --rebuild --refetch'",
-            file=sys.stderr,
-        )
+        source = failing_source(exc)
+        if source:
+            # A corrupt or truncated cached download is the realistic trigger
+            # here (gzip.BadGzipFile is an OSError; a gzip stream cut off
+            # mid-data raises the plain builtin EOFError instead, which is not
+            # an OSError); build() tags the offending raw source file onto the
+            # exception so this message can point at the right download.
+            print(
+                f"build failed: could not read {source} ({exc}); the download "
+                f"may be corrupt or truncated -- re-run with "
+                f"'hanzidraw fetch-data --rebuild --refetch'",
+                file=sys.stderr,
+            )
+        else:
+            # Not a tagged source-read failure -- e.g. a permission error
+            # writing the database itself -- so telling the user to
+            # re-download 20 MB of sources would be actively wrong advice.
+            print(f"build failed: {exc}", file=sys.stderr)
         return 1
     print(f"database: {db} ({db.stat().st_size / 1e6:.1f} MB)")
     return 0 if report.chars else 1
