@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
 
     def apply_config(self, cfg) -> None:
         self._cfg = cfg
-        self.canvas.configure(cfg)
+        self._canvas_cleared = self.canvas.configure(cfg)
         self._learn = Learn(self._learn_path, enabled=bool(cfg.get("ime.learn")))
         sources = [CharSource(self._store)]
         if bool(cfg.get("ime.phrases")):
@@ -110,6 +110,10 @@ class MainWindow(QMainWindow):
 
     def reload_config(self, path: Path | None = None) -> None:
         self.apply_config(load_config(path))
+        if self._canvas_cleared:
+            note = "canvas cleared: layout settings changed"
+            current = self.statusBar().currentMessage()
+            self.status(f"{current} | {note}" if current and current != "ready" else note)
 
     def status(self, text: str) -> None:
         self.statusBar().showMessage(text)

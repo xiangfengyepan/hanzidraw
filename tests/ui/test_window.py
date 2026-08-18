@@ -156,3 +156,49 @@ def test_the_practice_grid_grows_to_two_rows_after_eight_characters(qtbot, tmp_p
     two_row_lines = len(sheet.grid_lines("tian"))
     assert two_row_lines == one_row_lines * 2
     assert two_row_lines != one_row_lines
+
+
+def test_a_paint_only_reload_keeps_the_sheet_so_the_next_commit_lands_in_the_next_cell(
+    qtbot, window, tmp_path
+):
+    _type(qtbot, window, "shi")
+    qtbot.keyClick(window, Qt.Key.Key_2)  # commits the lone character "是"
+    assert window.canvas.glyph_count == 1
+    first = window.canvas.sheet.placed[0]
+
+    path = tmp_path / "paint.toml"
+    path.write_text('[glyph]\ncolor = "#ff0000"\n', encoding="utf-8")
+    window.reload_config(path)
+
+    # The glyph survived the reload, and the carriage kept its position.
+    assert window.canvas.glyph_count == 1
+
+    _type(qtbot, window, "shi")
+    qtbot.keyClick(window, Qt.Key.Key_2)
+    assert window.canvas.glyph_count == 2
+    second = window.canvas.sheet.placed[1]
+    assert second.oy == pytest.approx(first.oy)
+    assert second.ox == pytest.approx(first.ox + window.canvas.sheet.pitch)
+
+
+def test_a_layout_reload_clears_reports_it_and_the_next_commit_starts_at_the_first_cell(
+    qtbot, window, tmp_path
+):
+    _type(qtbot, window, "shi")
+    qtbot.keyClick(window, Qt.Key.Key_2)
+    assert window.canvas.glyph_count == 1
+
+    path = tmp_path / "layout.toml"
+    path.write_text("[glyph]\nsize_px = 80\n", encoding="utf-8")
+    window.reload_config(path)
+
+    assert window.canvas.glyph_count == 0
+    assert "canvas cleared: layout settings changed" in window.statusBar().currentMessage()
+
+    _type(qtbot, window, "shi")
+    qtbot.keyClick(window, Qt.Key.Key_2)
+    assert window.canvas.glyph_count == 1
+    placed = window.canvas.sheet.placed[0]
+    pad = (window.canvas.sheet.pitch - window.canvas.sheet.size) / 2.0
+    assert placed.ox == pytest.approx(pad)
+    assert placed.oy == pytest.approx(pad)

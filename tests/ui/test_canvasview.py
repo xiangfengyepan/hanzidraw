@@ -175,3 +175,31 @@ def test_render_produces_a_non_blank_image(view, qtbot, tmp_path):
     # colour" — a render that painted the background and grid but no strokes
     # at all would otherwise pass undetected.
     assert two_stroke_ink > one_stroke_ink * 1.5
+
+
+def test_configure_keeps_committed_glyphs_when_only_paint_properties_change(view, tmp_path):
+    # Regression test: a colour-only config reload used to wipe the canvas,
+    # which defeats the whole point of hot reload -- the user changes the
+    # colour to see it applied, not to lose what they just drew.
+    view.commit(GLYPH, "十", 0.0, 0.0, 100.0)
+    assert view.glyph_count == 1
+
+    (tmp_path / "paint.toml").write_text('[glyph]\ncolor = "#ff0000"\n', encoding="utf-8")
+    cleared = view.configure(load_config(tmp_path / "paint.toml"))
+
+    assert cleared is False
+    assert view.glyph_count == 1
+
+
+def test_configure_clears_and_reports_it_when_layout_changes(view, tmp_path):
+    # Layout keys (columns/advance/size_px/wrap) still have to clear: keeping
+    # glyphs placed under the old geometry would leave them overlapping the
+    # rebuilt grid, which is worse than losing the sheet.
+    view.commit(GLYPH, "十", 0.0, 0.0, 100.0)
+    assert view.glyph_count == 1
+
+    (tmp_path / "layout.toml").write_text("[glyph]\nsize_px = 80\n", encoding="utf-8")
+    cleared = view.configure(load_config(tmp_path / "layout.toml"))
+
+    assert cleared is True
+    assert view.glyph_count == 0

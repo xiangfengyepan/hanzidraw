@@ -17,6 +17,10 @@ FRAME_MS = 16
 
 
 class CanvasView(QWidget):
+    # Keys that affect the Sheet's geometry. Any other key is paint-time-only:
+    # the canvas can just re-render existing content with the new value.
+    _LAYOUT_KEYS = ("canvas.columns", "canvas.advance", "glyph.size_px", "canvas.wrap")
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._cfg = None
@@ -35,18 +39,37 @@ class CanvasView(QWidget):
 
     # ---- configuration ----
 
-    def configure(self, cfg) -> None:
+    def configure(self, cfg) -> bool:
+        """Apply cfg to the view.
+
+        Rebuilds the Sheet -- clearing everything committed so far -- only
+        when a layout-affecting key changed (columns/advance/size_px/wrap):
+        keeping already-placed glyphs while resizing the carriage would leave
+        them overlapping the new grid. Paint-time-only changes (colour, grid
+        style, animation, ...) keep every committed glyph and the sheet's
+        carriage position exactly as they were, so a hot reload can be
+        watched taking effect on what is already on screen instead of wiping
+        it.
+
+        Returns whether the canvas was cleared, so callers can tell the user.
+        """
+        previous = self._cfg
+        layout_changed = previous is None or any(
+            previous.get(key) != cfg.get(key) for key in self._LAYOUT_KEYS
+        )
         self._cfg = cfg
         self._mode = str(cfg.get("canvas.mode"))
-        self._sheet = Sheet(
-            columns=int(cfg.get("canvas.columns")),
-            advance=float(cfg.get("canvas.advance")),
-            size=float(cfg.get("glyph.size_px")),
-            wrap=bool(cfg.get("canvas.wrap")),
-        )
-        self._done.clear()
-        self._current = None
+        if layout_changed:
+            self._sheet = Sheet(
+                columns=int(cfg.get("canvas.columns")),
+                advance=float(cfg.get("canvas.advance")),
+                size=float(cfg.get("glyph.size_px")),
+                wrap=bool(cfg.get("canvas.wrap")),
+            )
+            self._done.clear()
+            self._current = None
         self.update()
+        return layout_changed
 
     def set_mode(self, mode: str) -> None:
         self._mode = mode
