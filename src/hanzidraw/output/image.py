@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -51,7 +52,16 @@ class SvgBackend:
 
 
 def save_png(backend: SvgBackend, path: Path) -> None:
-    """Rasterise the SVG with Qt. PNG output is the one image format that needs Qt."""
+    """Rasterise the SVG with Qt. PNG output is the one image format that needs Qt.
+
+    This is a headless code path: it must not depend on a display server being
+    present. Qt's platform-plugin selection happens in native code the moment a
+    QGuiApplication is constructed, and a missing display there is a C++-level
+    abort that no Python ``except`` can catch — so the platform must be forced
+    to "offscreen" *before* that happens, whenever the caller hasn't already
+    chosen one. ``setdefault`` leaves an explicit ``QT_QPA_PLATFORM`` alone.
+    """
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     try:
         from PySide6.QtCore import QByteArray  # noqa: PLC0415
         from PySide6.QtGui import QGuiApplication, QImage, QPainter  # noqa: PLC0415
