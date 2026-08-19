@@ -34,17 +34,27 @@ Two installers do the whole job — install `uv` (which supplies the right Pytho
 install the app with both extras, put the character database in place, and verify
 the result. Both are idempotent, so re-running them is safe.
 
+From a clone, or straight from the web with nothing installed first:
+
 ```bash
-./install.sh                     # Linux / macOS
-./install.sh --db hanzidraw.sqlite.gz   # import a prebuilt database instead of downloading
-./install.sh --help              # --no-data, --no-extras, --yes
+# Linux / macOS
+./install.sh                                   # from a clone
+curl -fsSL https://raw.githubusercontent.com/xiangfengyepan/hanzidraw/main/install.sh | bash
+./install.sh --help                            # --no-data, --db FILE, --no-extras, --yes
 ```
 
 ```powershell
-.\install.ps1                    # Windows
-.\install.ps1 -Db .\hanzidraw.sqlite.gz -Yes
-Get-Help .\install.ps1 -Full     # -NoData, -NoExtras, -Yes, -Python
+# Windows
+.\install.ps1                                  # from a clone
+irm https://raw.githubusercontent.com/xiangfengyepan/hanzidraw/main/install.ps1 | iex
+
+# To pass options to the piped form, run it as a script block -- `iex` cannot
+# forward parameters:
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xiangfengyepan/hanzidraw/main/install.ps1))) -Yes -Database .\hanzidraw.sqlite.gz
 ```
+
+Piped in, neither script needs a checkout: they install from the repository's
+source archive, so `git` is not required either.
 
 On Linux the script also checks for `libxcb-cursor0`, a system library Qt needs at
 runtime: without it the window does not open, and Qt reports that as a wall of

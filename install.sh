@@ -9,7 +9,14 @@
 #   ./install.sh --no-extras     # base install only: no GUI, no mouse backend
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Piped execution ("curl ... | bash") has no script file, so BASH_SOURCE is unset.
+# Fall back to the working directory, which is also where a wheel or checkout would be.
+SELF="${BASH_SOURCE[0]:-}"
+if [ -n "$SELF" ] && [ -f "$SELF" ]; then
+  HERE="$(cd "$(dirname "$SELF")" && pwd)"
+else
+  HERE="$PWD"
+fi
 ASSUME_YES=0; SKIP_DATA=0; DB_FILE=""; EXTRAS="[gui,mouse]"
 PYTHON_VERSION="3.12"          # PySide6 has no wheels for 3.13+ yet; do not "upgrade" this
 REPO_URL="https://github.com/xiangfengyepan/hanzidraw"
@@ -21,7 +28,20 @@ while [ $# -gt 0 ]; do
     --no-extras) EXTRAS="" ;;
     --db)        shift; DB_FILE="${1:-}"; [ -n "$DB_FILE" ] || { echo "--db needs a file path" >&2; exit 2; } ;;
     --python)    shift; PYTHON_VERSION="${1:-}" ;;
-    -h|--help)   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)
+      if [ -n "$SELF" ] && [ -f "$SELF" ]; then
+        awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$SELF"
+      else
+        # Piped in: the comment block is not on disk to read back.
+        printf '%s\n' \
+          "Install hanzidraw on Linux (or macOS). Idempotent: safe to re-run." "" \
+          "  --no-data     skip the character database step" \
+          "  --db FILE     import a prebuilt database (.sqlite or .sqlite.gz)" \
+          "  --no-extras   base install only: no GUI, no mouse backend" \
+          "  --yes         never prompt" \
+          "  --python VER  Python version to install under (default 3.12)"
+      fi
+      exit 0 ;;
     *)           echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
   shift

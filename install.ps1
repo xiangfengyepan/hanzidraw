@@ -6,7 +6,7 @@
     Installs uv (which supplies the right Python), installs hanzidraw with the GUI
     and mouse extras, puts the character database in place, and verifies the result.
 
-.PARAMETER Db
+.PARAMETER Database
     Import a prebuilt database instead of downloading: a .sqlite or .sqlite.gz file.
 
 .PARAMETER NoData
@@ -21,11 +21,13 @@
 .EXAMPLE
     .\install.ps1
 .EXAMPLE
-    .\install.ps1 -Db .\hanzidraw.sqlite.gz -Yes
+    .\install.ps1 -Database .\hanzidraw.sqlite.gz -Yes
 #>
 [CmdletBinding()]
 param(
-    [string] $Db,
+    # Not named -Db: CmdletBinding() adds -Debug, whose built-in alias is "db",
+    # and the two collide at parameter-binding time.
+    [string] $Database,
     [switch] $NoData,
     [switch] $NoExtras,
     [switch] $Yes,
@@ -34,9 +36,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Here     = Split-Path -Parent $PSCommandPath
+# Piped execution ("irm ... | iex") has no script file, so $PSCommandPath is empty
+# and Split-Path would refuse to bind it. Fall back to the current directory: that
+# is also the right place to look for a wheel or checkout when run that way.
+$Here = if ($PSCommandPath) { Split-Path -Parent $PSCommandPath }
+        elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+        else { (Get-Location).Path }
 $Extras   = if ($NoExtras) { '' } else { '[gui,mouse]' }
 $RepoUrl  = 'https://github.com/xiangfengyepan/hanzidraw'
+# A source tarball rather than git+URL: a fresh Windows machine often has no git,
+# and uv can install straight from an archive URL.
+$RepoArchive = "$RepoUrl/archive/refs/heads/main.tar.gz"
 
 function Say  { param([string]$m) Write-Host "==> $m" -ForegroundColor Cyan }
 function Warn { param([string]$m) Write-Host "warning: $m" -ForegroundColor Yellow }
@@ -54,8 +64,15 @@ function Ask {
 function Refresh-Path {
     # uv installs to %USERPROFILE%\.local\bin, which an already-open shell does not
     # know about yet. Add it for this session so the rest of the script can proceed.
-    $userBin = Join-Path $env:USERPROFILE '.local\bin'
-    if (Test-Path $userBin) { $env:PATH = "$userBin;$env:PATH" }
+    # Guarded: USERPROFILE is always set on Windows, but a null here would abort the
+    # whole install over a PATH convenience, which is a bad trade.
+    # Not named $home: PowerShell's $HOME is a read-only automatic variable and
+    # assigning to it fails on every platform.
+    $userHome = if ($env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { $null }
+    if ($userHome) {
+        $userBin = Join-Path $userHome '.local\bin'
+        if (Test-Path $userBin) { $env:PATH = "$userBin;$env:PATH" }
+    }
     $machine = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
     $user    = [Environment]::GetEnvironmentVariable('PATH', 'User')
     $env:PATH = (@($env:PATH, $machine, $user) | Where-Object { $_ }) -join ';'
@@ -83,14 +100,21 @@ if (Test-Path (Join-Path $Here 'pyproject.toml')) {
 } elseif ($wheel) {
     $target = $wheel.FullName;   $source = $wheel.Name
 } else {
-    $target = "git+$RepoUrl";    $source = $RepoUrl
+    $target = "hanzidraw @ $RepoArchive"; $source = $RepoUrl
+}
+# With a direct reference ("name @ url") the extras go inside the name, so the
+# suffix form used for a path target would be invalid there.
+if ($target -like '* @ *') {
+    $spec = if ($Extras) { $target -replace '^hanzidraw ', "hanzidraw$Extras " } else { $target }
+} else {
+    $spec = "$target$Extras"
 }
 Say "installing hanzidraw$Extras from $source"
 # VIRTUAL_ENV would divert the install into an activated venv instead of a tool.
 $savedVenv = $env:VIRTUAL_ENV
 $env:VIRTUAL_ENV = $null
 try {
-    uv tool install --force --python $Python "$target$Extras"
+    uv tool install --force --python $Python "$spec"
     if ($LASTEXITCODE -ne 0) { Die "uv tool install failed (exit $LASTEXITCODE)" }
 } finally {
     $env:VIRTUAL_ENV = $savedVenv
@@ -98,6 +122,9 @@ try {
 Refresh-Path
 
 # ---------------------------------------------------------- the database
+if (-not $env:LOCALAPPDATA) {
+    Die 'LOCALAPPDATA is not set, so this does not look like Windows. On Linux or macOS use install.sh instead.'
+}
 $dbDir = Join-Path $env:LOCALAPPDATA 'hanzidraw'
 $dbPath = Join-Path $dbDir 'hanzidraw.sqlite'
 
@@ -121,8 +148,8 @@ function Import-Database {
 
 if ($NoData) {
     Say "skipping the database step. Run 'hanzidraw fetch-data' when you want it."
-} elseif ($Db) {
-    Import-Database -From $Db
+} elseif ($Database) {
+    Import-Database -From $Database
 } elseif (Test-Path $dbPath) {
     $mb = [math]::Round((Get-Item $dbPath).Length / 1MB, 1)
     Say "database already present: $dbPath ($mb MB)"
