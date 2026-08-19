@@ -28,10 +28,35 @@ refreshed from the same pipeline instead of edited by hand.
 
 ## Install
 
-Requires Python 3.11+.
+### The scripted way
+
+Two installers do the whole job — install `uv` (which supplies the right Python),
+install the app with both extras, put the character database in place, and verify
+the result. Both are idempotent, so re-running them is safe.
 
 ```bash
-uv tool install .          # or: pipx install .
+./install.sh                     # Linux / macOS
+./install.sh --db hanzidraw.sqlite.gz   # import a prebuilt database instead of downloading
+./install.sh --help              # --no-data, --no-extras, --yes
+```
+
+```powershell
+.\install.ps1                    # Windows
+.\install.ps1 -Db .\hanzidraw.sqlite.gz -Yes
+Get-Help .\install.ps1 -Full     # -NoData, -NoExtras, -Yes, -Python
+```
+
+On Linux the script also checks for `libxcb-cursor0`, a system library Qt needs at
+runtime: without it the window does not open, and Qt reports that as a wall of
+plugin text rather than a usable message.
+
+### By hand
+
+Requires Python 3.11+, and **3.12 for the GUI** — PySide6 has no wheels for 3.13+
+yet, so a newer interpreter installs cleanly and then cannot open a window.
+
+```bash
+uv tool install --python 3.12 .          # or: pipx install .
 ```
 
 That installs the `hanzidraw` command with no GUI support. Two optional
